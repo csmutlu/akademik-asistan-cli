@@ -3,6 +3,7 @@
 ## 1. Local verification
 
 ```bash
+cd cli
 npm ci
 npm run build
 npm test
@@ -15,8 +16,8 @@ The Homebrew formula now points to a GitHub release asset, not the npm registry 
 Push a version tag:
 
 ```bash
-git tag cli-v0.1.3
-git push origin cli-v0.1.3
+git tag cli-v0.1.4
+git push origin cli-v0.1.4
 ```
 
 The release workflow will:
@@ -33,35 +34,23 @@ Workflow file:
 .github/workflows/cli-release.yml
 ```
 
-## 3. Publish to npm
+## 3. Publish to npm (optional)
 
-Preferred path: npm trusted publishing with GitHub Actions.
+Local publish requires npm authentication first:
 
-Package name:
+```bash
+npm adduser
+cd cli
+npm publish --access public
+```
+
+The package name is:
 
 ```bash
 aasistan
 ```
 
-Repository:
-
-```bash
-csmutlu/akademik-asistan-cli
-```
-
-After npm trusted publishing is connected to this repository, every new tag release can publish automatically:
-
-```bash
-git tag cli-v0.1.3
-git push origin cli-v0.1.3
-```
-
-Manual local fallback still works with npm authentication:
-
-```bash
-npm adduser
-npm publish --access public
-```
+If the repository has an `NPM_TOKEN` secret, the GitHub release workflow can do this automatically.
 
 ## 4. Generate or refresh the Homebrew formula locally
 
@@ -95,7 +84,7 @@ brew install csmutlu/akademik-asistan-cli/akademik-asistan
 After the tag workflow finishes, verify:
 
 ```bash
-curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.3/aasistan-0.1.3.tgz
+curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.4/aasistan-0.1.4.tgz
 brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
 brew install csmutlu/akademik-asistan-cli/akademik-asistan
 aasistan help

@@ -63,9 +63,18 @@ jobs:
         run: node scripts/update_homebrew_formula.mjs
 
       - name: Publish to npm
+        id: npm_publish
+        continue-on-error: true
         if: ${{ github.event_name == 'push' || github.event.inputs.publish_npm == 'true' }}
         run: |
           npm publish --access public
+
+      - name: Report npm publish status
+        if: ${{ always() && (github.event_name == 'push' || github.event.inputs.publish_npm == 'true') }}
+        run: |
+          if [ "${{ steps.npm_publish.outcome }}" != "success" ]; then
+            echo "npm publish did not complete successfully. Release assets and Homebrew formula will still continue."
+          fi
 
       - name: Commit formula to main
         if: ${{ github.event_name == 'push' }}

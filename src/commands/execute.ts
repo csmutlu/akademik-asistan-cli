@@ -14,10 +14,16 @@ export async function executeCommand(command: ParsedCommand, context: ExecuteCon
     case 'help':
       return { kind: 'text', data: '' };
     case 'login':
-      return { kind: 'profile', data: await loginWithBrowser(api) };
+      return {
+        kind: 'profile',
+        data: await loginWithBrowser(api, {
+          debug: command.args.debug === true,
+          noOpen: command.args['no-open'] === true,
+        }),
+      };
     case 'logout':
       await api.logout();
-      return { kind: 'text', data: 'Oturum kapatildi.' };
+      return { kind: 'text', data: 'Oturum kapatıldı.' };
     case 'whoami':
       return { kind: 'profile', data: await api.getProfile() };
     case 'gundem':

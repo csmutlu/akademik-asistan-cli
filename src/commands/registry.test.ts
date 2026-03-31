@@ -20,6 +20,16 @@ test('parses slash commands and flags', () => {
   }
 });
 
+test('parses login debug and no-open flags', () => {
+  const parsed = parseCommand(['login', '--debug', '--no-open']);
+  assert.ok(parsed && parsed.ok);
+  if (parsed && parsed.ok) {
+    assert.equal(parsed.command.id, 'login');
+    assert.equal(parsed.command.args.debug, true);
+    assert.equal(parsed.command.args['no-open'], true);
+  }
+});
+
 test('returns suggestion for close matches', () => {
   const parsed = parseCommand(['gundm']);
   assert.ok(parsed && !parsed.ok);

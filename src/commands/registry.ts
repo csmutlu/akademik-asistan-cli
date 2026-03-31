@@ -1,21 +1,21 @@
 import type { CommandDefinition, CommandId, ParsedCommand } from '../types.js';
 
 const DEFINITIONS: CommandDefinition[] = [
-  { id: 'login', path: ['login'], aliases: ['/login'], description: 'Tarayici ile oturum ac', requiresAuth: false, example: 'aasistan login' },
-  { id: 'logout', path: ['logout'], aliases: ['/logout'], description: 'Kayitli oturumu kapat', requiresAuth: false, example: 'aasistan logout' },
-  { id: 'whoami', path: ['whoami'], aliases: ['/whoami'], description: 'Aktif kullaniciyi goster', example: 'aasistan whoami' },
-  { id: 'gundem', path: ['gundem'], aliases: ['/gundem'], description: 'Kisisel gundemi getir', example: 'aasistan gundem' },
-  { id: 'bugun', path: ['bugun'], aliases: ['/bugun'], description: 'Bugunun ders, odev ve sinavlari', example: 'aasistan bugun' },
-  { id: 'yarin', path: ['yarin'], aliases: ['/yarin'], description: 'Yarinin akademik kayitlari', example: 'aasistan yarin' },
-  { id: 'hafta', path: ['hafta'], aliases: ['/hafta'], description: 'Onumuzdeki 7 gunu ozetle', example: 'aasistan hafta' },
-  { id: 'odev', path: ['odev'], aliases: ['/odev'], description: 'Yaklasan odevleri listele', example: 'aasistan odev' },
-  { id: 'sinav', path: ['sinav'], aliases: ['/sinav'], description: 'Yaklasan sinavlari ve donemleri listele', example: 'aasistan sinav' },
-  { id: 'dersler', path: ['dersler'], aliases: ['/dersler'], description: 'Simdi, bugun ve yarin dersleri', example: 'aasistan dersler' },
-  { id: 'duyurular', path: ['duyurular'], aliases: ['/duyurular'], description: 'Son universite duyurulari', example: 'aasistan duyurular' },
-  { id: 'yemekhane', path: ['yemekhane'], aliases: ['/yemekhane'], description: 'Bugun veya yarin menusu', example: 'aasistan yemekhane --day tomorrow' },
-  { id: 'teacher-dashboard', path: ['teacher', 'dashboard'], aliases: ['/teacher dashboard'], description: 'Ogretmen/admin guvenlik ozeti', example: 'aasistan teacher dashboard' },
-  { id: 'watch', path: ['watch'], aliases: ['/watch'], description: 'Surekli acik brief modu', example: 'aasistan watch' },
-  { id: 'help', path: ['help'], aliases: ['/help'], description: 'Komut yardimini goster', requiresAuth: false, example: 'aasistan help' },
+  { id: 'login', path: ['login'], aliases: ['/login'], description: 'Tarayıcı ile oturum aç', requiresAuth: false, example: 'aasistan login --debug' },
+  { id: 'logout', path: ['logout'], aliases: ['/logout'], description: 'Kayıtlı oturumu kapat', requiresAuth: false, example: 'aasistan logout' },
+  { id: 'whoami', path: ['whoami'], aliases: ['/whoami'], description: 'Aktif kullanıcıyı göster', example: 'aasistan whoami' },
+  { id: 'gundem', path: ['gundem'], aliases: ['/gundem'], description: 'Kişisel gündemi getir', example: 'aasistan gundem' },
+  { id: 'bugun', path: ['bugun'], aliases: ['/bugun'], description: 'Bugünün ders, ödev ve sınavları', example: 'aasistan bugun' },
+  { id: 'yarin', path: ['yarin'], aliases: ['/yarin'], description: 'Yarının akademik kayıtları', example: 'aasistan yarin' },
+  { id: 'hafta', path: ['hafta'], aliases: ['/hafta'], description: 'Önümüzdeki 7 günü özetle', example: 'aasistan hafta' },
+  { id: 'odev', path: ['odev'], aliases: ['/odev'], description: 'Yaklaşan ödevleri listele', example: 'aasistan odev' },
+  { id: 'sinav', path: ['sinav'], aliases: ['/sinav'], description: 'Yaklaşan sınavları ve dönemleri listele', example: 'aasistan sinav' },
+  { id: 'dersler', path: ['dersler'], aliases: ['/dersler'], description: 'Şimdi, bugün ve yarın dersleri', example: 'aasistan dersler' },
+  { id: 'duyurular', path: ['duyurular'], aliases: ['/duyurular'], description: 'Son üniversite duyuruları', example: 'aasistan duyurular' },
+  { id: 'yemekhane', path: ['yemekhane'], aliases: ['/yemekhane'], description: 'Bugün veya yarın menüsü', example: 'aasistan yemekhane --day tomorrow' },
+  { id: 'teacher-dashboard', path: ['teacher', 'dashboard'], aliases: ['/teacher dashboard'], description: 'Öğretmen/admin güvenlik özeti', example: 'aasistan teacher dashboard' },
+  { id: 'watch', path: ['watch'], aliases: ['/watch'], description: 'Sürekli açık brief modu', example: 'aasistan watch' },
+  { id: 'help', path: ['help'], aliases: ['/help'], description: 'Komut yardımını göster', requiresAuth: false, example: 'aasistan help' },
 ];
 
 type ParseOutcome =

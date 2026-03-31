@@ -5,6 +5,8 @@ import { DEFAULT_WEB_BASE_URL, LOGIN_TIMEOUT_MS } from '../config.js';
 import { writeSession } from '../state/storage.js';
 import type { CliSession, CliUser, Profile, StoredSession } from '../types.js';
 import { ApiClient, ApiError } from '../api/client.js';
+import { ui } from '../display.js';
+import { appendLoginDebugEvent, getLoginDebugLogPath } from '../logging/login-debug.js';
 
 type LoginCallbackPayload = {
   state?: string;
@@ -18,6 +20,12 @@ type LoopbackCallbackResult = {
   body: string;
   payload?: LoginCallbackPayload;
   error?: Error;
+};
+
+export type LoginOptions = {
+  debug?: boolean;
+  noOpen?: boolean;
+  print?: (line: string) => void;
 };
 
 function buildJsonResponse(statusCode: number, payload: unknown) {
@@ -51,7 +59,7 @@ export function buildLoopbackCallbackResult(
     return {
       statusCode: 400,
       headers,
-      body: buildJsonResponse(400, { error: 'Missing request URL' }),
+      body: buildJsonResponse(400, { error: 'İstek URL bilgisi eksik.' }),
     };
   }
 
@@ -60,7 +68,7 @@ export function buildLoopbackCallbackResult(
     return {
       statusCode: 404,
       headers,
-      body: buildJsonResponse(404, { error: 'Not found' }),
+      body: buildJsonResponse(404, { error: 'İstenen yol bulunamadı.' }),
     };
   }
 
@@ -76,7 +84,7 @@ export function buildLoopbackCallbackResult(
     return {
       statusCode: 405,
       headers,
-      body: buildJsonResponse(405, { error: 'Method not allowed' }),
+      body: buildJsonResponse(405, { error: 'Yönteme izin verilmiyor.' }),
     };
   }
 
@@ -86,7 +94,7 @@ export function buildLoopbackCallbackResult(
       return {
         statusCode: 400,
         headers,
-        body: buildJsonResponse(400, { error: 'State mismatch' }),
+        body: buildJsonResponse(400, { error: 'State doğrulaması başarısız.' }),
       };
     }
 
@@ -108,46 +116,119 @@ export function buildLoopbackCallbackResult(
     return {
       statusCode: 400,
       headers,
-      body: buildJsonResponse(400, { error: 'Invalid JSON payload' }),
-      error: error instanceof Error ? error : new Error('Invalid JSON payload'),
+      body: buildJsonResponse(400, { error: 'JSON payload çözümlenemedi.' }),
+      error: error instanceof Error ? error : new Error('JSON payload çözümlenemedi.'),
     };
   }
 }
 
-export async function loginWithBrowser(api: ApiClient): Promise<Profile> {
+function printLine(line: string, printer?: (line: string) => void) {
+  const output = ui(line);
+  if (printer) {
+    printer(output);
+    return;
+  }
+
+  process.stderr.write(`${output}\n`);
+}
+
+async function recordLoginEvent(
+  type: Parameters<typeof appendLoginDebugEvent>[0]['type'],
+  message?: string,
+  meta?: Record<string, unknown>,
+) {
+  await appendLoginDebugEvent({
+    ts: new Date().toISOString(),
+    type,
+    message,
+    meta,
+  }).catch(() => undefined);
+}
+
+export async function loginWithBrowser(api: ApiClient, options: LoginOptions = {}): Promise<Profile> {
   const state = randomBytes(24).toString('hex');
+  const debug = options.debug === true;
+  const noOpen = options.noOpen === true;
+  const printer = options.print;
 
   const payload = await new Promise<LoginCallbackPayload>((resolve, reject) => {
     const server = http.createServer((request, response) => {
-      if (request.method === 'OPTIONS') {
-        const result = buildLoopbackCallbackResult(request, state);
-        response.writeHead(result.statusCode, result.headers);
-        response.end(result.body);
-        return;
-      }
-
-      const chunks: Buffer[] = [];
-      request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-      request.on('end', () => {
-        const result = buildLoopbackCallbackResult(request, state, Buffer.concat(chunks).toString('utf8'));
-        response.writeHead(result.statusCode, result.headers);
-        response.end(result.body);
-
-        if (result.payload) {
-          resolve(result.payload);
-          server.close();
+      const handleRequest = async () => {
+        if (request.method === 'OPTIONS') {
+          const result = buildLoopbackCallbackResult(request, state);
+          const address = server.address();
+          await recordLoginEvent(
+            'loopback-preflight',
+            'Loopback preflight isteği alındı.',
+            {
+              port: address && typeof address !== 'string' ? address.port : null,
+              allowPrivateNetwork: result.headers['Access-Control-Allow-Private-Network'] === 'true',
+            },
+          );
+          response.writeHead(result.statusCode, result.headers);
+          response.end(result.body);
           return;
         }
 
-        if (result.error) {
-          reject(result.error);
-          server.close();
-        }
+        const chunks: Buffer[] = [];
+        request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        request.on('end', async () => {
+          const address = server.address();
+          const port = address && typeof address !== 'string' ? address.port : null;
+          const result = buildLoopbackCallbackResult(request, state, Buffer.concat(chunks).toString('utf8'));
+          await recordLoginEvent(
+            'loopback-callback',
+            result.payload ? 'Loopback callback alındı.' : result.error?.message || 'Loopback callback reddedildi.',
+            {
+              port,
+              method: request.method,
+              statusCode: result.statusCode,
+              hasPayload: Boolean(result.payload),
+              userId: result.payload?.user?.id || null,
+            },
+          );
+          response.writeHead(result.statusCode, result.headers);
+          response.end(result.body);
+
+          if (result.payload) {
+            resolve(result.payload);
+            server.close();
+            return;
+          }
+
+          if (result.error) {
+            await recordLoginEvent('login-error', result.error.message, {
+              port,
+              phase: 'loopback-callback',
+            });
+            reject(result.error);
+            server.close();
+          }
+        });
+      };
+
+      void handleRequest().catch(async (error) => {
+        const message = error instanceof Error ? error.message : 'Loopback isteği işlenemedi.';
+        await recordLoginEvent('login-error', message, {
+          phase: 'loopback-request',
+        });
+        response.writeHead(500, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        });
+        response.end(buildJsonResponse(500, { error: message }));
+        reject(error);
+        server.close();
       });
     });
 
-    const timeout = setTimeout(() => {
-      reject(new Error('Tarayici callback zamani asimina ugradi.'));
+    const timeout = setTimeout(async () => {
+      const message = 'Tarayıcı callback zaman aşımına uğradı.';
+      await recordLoginEvent('login-error', message, {
+        phase: 'timeout',
+        timeoutMs: LOGIN_TIMEOUT_MS,
+      });
+      reject(new Error(message));
       server.close();
     }, LOGIN_TIMEOUT_MS);
 
@@ -155,22 +236,80 @@ export async function loginWithBrowser(api: ApiClient): Promise<Profile> {
       const address = server.address();
       if (!address || typeof address === 'string') {
         clearTimeout(timeout);
-        reject(new Error('Loopback server baslatilamadi.'));
+        const message = 'Loopback sunucusu başlatılamadı.';
+        await recordLoginEvent('login-error', message, {
+          phase: 'listen',
+        });
+        reject(new Error(message));
         server.close();
         return;
       }
 
-      const loginUrl = `${DEFAULT_WEB_BASE_URL.replace(/\/$/, '')}/cli-auth?port=${address.port}&state=${state}`;
+      const loginUrl = new URL(`${DEFAULT_WEB_BASE_URL.replace(/\/$/, '')}/cli-auth`);
+      loginUrl.searchParams.set('port', String(address.port));
+      loginUrl.searchParams.set('state', state);
+      if (debug) {
+        loginUrl.searchParams.set('debug', '1');
+      }
+
+      await recordLoginEvent('login-start', 'CLI giriş akışı başlatıldı.', {
+        port: address.port,
+        debug,
+        noOpen,
+        logPath: getLoginDebugLogPath(),
+      });
+      await recordLoginEvent('login-url-generated', 'Giriş bağlantısı üretildi.', {
+        port: address.port,
+        loginUrl: loginUrl.toString(),
+        debug,
+      });
+
+      printLine(`Giriş bağlantısı: ${loginUrl.toString()}`, printer);
+      if (debug) {
+        printLine(`[login] Loopback portu hazır: ${address.port}`, printer);
+        printLine(`[login] Debug günlüğü: ${getLoginDebugLogPath()}`, printer);
+      }
+
+      if (noOpen) {
+        await recordLoginEvent('browser-open-attempt', 'Tarayıcı otomatik açma atlandı.', {
+          port: address.port,
+          skipped: true,
+          loginUrl: loginUrl.toString(),
+        });
+        if (debug) {
+          printLine('[login] Tarayıcı otomatik açma atlandı (--no-open).', printer);
+        }
+        return;
+      }
+
       try {
-        await open(loginUrl);
-      } catch {
-        process.stdout.write(`Tarayicida ac: ${loginUrl}\n`);
+        await recordLoginEvent('browser-open-attempt', 'Tarayıcı açma denemesi gönderildi.', {
+          port: address.port,
+          loginUrl: loginUrl.toString(),
+          skipped: false,
+        });
+        await open(loginUrl.toString());
+        if (debug) {
+          printLine('[login] Varsayılan tarayıcı açıldı.', printer);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Tarayıcı açılamadı.';
+        await recordLoginEvent('browser-open-attempt', message, {
+          port: address.port,
+          loginUrl: loginUrl.toString(),
+          skipped: false,
+          ok: false,
+        });
+        printLine('Tarayıcı otomatik açılamadı. Yukarıdaki bağlantıyı elle açabilirsin.', printer);
       }
     });
 
     server.on('close', () => clearTimeout(timeout));
-    server.on('error', (error) => {
+    server.on('error', async (error) => {
       clearTimeout(timeout);
+      await recordLoginEvent('login-error', error.message, {
+        phase: 'server-error',
+      });
       reject(error);
     });
   });
@@ -181,10 +320,25 @@ export async function loginWithBrowser(api: ApiClient): Promise<Profile> {
     updatedAt: new Date().toISOString(),
   };
   await writeSession(stored);
+  await recordLoginEvent('session-stored', 'CLI oturumu yerel diske kaydedildi.', {
+    userId: stored.user.id,
+    email: stored.user.email || null,
+  });
 
   try {
-    return await api.getProfile();
+    const profile = await api.getProfile();
+    await recordLoginEvent('profile-fetch', 'Profil doğrulandı.', {
+      ok: true,
+      role: profile.role,
+      email: profile.email,
+    });
+    return profile;
   } catch (error) {
+    await recordLoginEvent('profile-fetch', 'Profil doğrulama fallback ile tamamlandı.', {
+      ok: false,
+      fallback: true,
+      error: error instanceof Error ? error.message : 'Profil alınamadı.',
+    });
     if (error instanceof ApiError || error instanceof Error) {
       return {
         id: payload.user?.id || 'unknown',

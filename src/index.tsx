@@ -16,7 +16,7 @@ async function main() {
   await maybeRunDream(initialProfile).catch(() => undefined);
 
   if (parsed && !parsed.ok) {
-    process.stderr.write(`${parsed.error}${parsed.suggestion ? `\nSanirim: ${parsed.suggestion}` : ''}\n`);
+    process.stderr.write(`${parsed.error}${parsed.suggestion ? `\nSanırım: ${parsed.suggestion}` : ''}\n`);
     process.exitCode = 1;
     return;
   }
@@ -70,7 +70,7 @@ async function main() {
       return;
     }
 
-    process.stderr.write(`${error instanceof Error ? error.message : 'Komut calismadi.'}\n`);
+    process.stderr.write(`${error instanceof Error ? error.message : 'Komut çalışmadı.'}\n`);
     process.exitCode = 1;
   }
 }

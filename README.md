@@ -8,7 +8,7 @@ Public npm package for the Akademik Asistan terminal experience.
 
 ```bash
 brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
-brew install aasistan
+brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 
 This installs both commands:
@@ -16,12 +16,6 @@ This installs both commands:
 ```bash
 aasistan
 akademik-asistan
-```
-
-If you do not want to add the tap first, the fully qualified fallback is:
-
-```bash
-brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 
 ### npm
@@ -40,6 +34,8 @@ aasistan
 
 ```bash
 aasistan login
+aasistan login --no-open
+aasistan login --debug
 aasistan whoami
 aasistan gundem
 aasistan bugun
@@ -58,14 +54,19 @@ aasistan
 
 Inside the interface:
 
-- `j/k`, arrows, `Tab`: navigate cards
+- `j/k`, arrows, `Tab`: navigate panels
 - `Enter`: open selected view
 - `/`: command palette
 - `?`: help
 - `r`: refresh
+- `h`: back to home
 - `q`: quit
 
 ## Extras
 
+- `aasistan login` always prints a copyable login URL before trying to open the browser
+- `aasistan login --no-open` prints the URL without auto-opening the browser
+- `aasistan login --debug` writes structured login traces to `~/.config/akademik-asistan/logs/cli-debug-YYYY-MM-DD.jsonl`
+- `AA_ASCII=1` forces ASCII fallback for terminal UI text
 - `aasistan watch` runs a brief always-on poller for agenda and announcement changes
 - local memory consolidation is written to `~/.config/akademik-asistan/MEMORY.md`

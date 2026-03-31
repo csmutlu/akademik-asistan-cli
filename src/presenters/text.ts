@@ -1,4 +1,5 @@
 import { getCommandDefinitions } from '../commands/registry.js';
+import { ui } from '../display.js';
 import type {
   AgendaPayload,
   AgendaSection,
@@ -40,16 +41,18 @@ export function renderHelpText(): string {
       return `- ${command}\n  ${definition.description}${definition.example ? `\n  ${definition.example}` : ''}`;
     });
 
-  return [
+  return ui([
     'Akademik Asistan CLI',
     '',
-    'Kurulum sonrasi iki kullanim bicimi var:',
-    '- Dogrudan komutlar: aasistan gundem, aasistan bugun, aasistan duyurular',
+    'Kurulum sonrası iki kullanım biçimi var:',
+    '- Doğrudan komutlar: aasistan gundem, aasistan bugun, aasistan duyurular',
     '- Hybrid TUI: aasistan',
     '- Uzun komut: akademik-asistan',
     '',
-    'Baslangic:',
+    'Başlangıç:',
     '- akademik-asistan login',
+    '- akademik-asistan login --debug',
+    '- akademik-asistan login --no-open',
     '- akademik-asistan whoami',
     '- akademik-asistan gundem',
     '- akademik-asistan watch',
@@ -58,83 +61,87 @@ export function renderHelpText(): string {
     'Komutlar',
     ...definitions,
     '',
-    'TUI kisayollari',
-    '- j/k veya ok tuslari: kart degistir',
-    '- Tab: kartlar arasinda gez',
-    '- Enter: secili gorunumu ac',
-    '- /: komut palette',
-    '- ?: yardim',
+    'TUI kısayolları',
+    '- j/k veya ok tuşları: panel değiştir',
+    '- Tab: paneller arasında gez',
+    '- Enter: seçili görünümü aç',
+    '- /: komut paleti',
+    '- ?: yardım',
     '- r: yenile',
     '- otomatik arka plan yenileme: 60 sn',
-    '- h veya sol ok: ana ekrana don',
-    '- q: cikis',
+    '- h veya sol ok: ana ekrana dön',
+    '- q: çıkış',
     '',
-    'JSON cikti icin: akademik-asistan --json gundem',
-    'Kisa komut icin: aasistan',
-    'Yerel hafiza: ~/.config/akademik-asistan/MEMORY.md',
-  ].join('\n');
+    'JSON çıktı için: akademik-asistan --json gundem',
+    'Kısa komut için: aasistan',
+    'ASCII fallback: AA_ASCII=1 aasistan help',
+    'Yerel hafıza: ~/.config/akademik-asistan/MEMORY.md',
+    'Login debug günlüğü: ~/.config/akademik-asistan/logs/cli-debug-YYYY-MM-DD.jsonl',
+  ].join('\n'));
 }
 
 export function renderOnboardingText(): string {
-  return [
+  return ui([
     'Akademik Asistan CLI',
     '',
-    'Bu surum read-only calisir ve tum kisiler ayni paketle login olabilir.',
+    'Bu sürüm read-only çalışır ve tüm kişiler aynı paketle login olabilir.',
     '',
     '1. akademik-asistan login',
-    '2. akademik-asistan whoami',
-    '3. akademik-asistan gundem',
-    '4. akademik-asistan watch',
+    '2. akademik-asistan login --no-open',
+    '3. akademik-asistan login --debug',
+    '4. akademik-asistan whoami',
+    '5. akademik-asistan gundem',
+    '6. akademik-asistan watch',
     '',
-    'Interaktif mod: aasistan',
+    'İnteraktif mod: aasistan',
     'Uzun komut: akademik-asistan',
-    'Slash komutlari: /gundem, /bugun, /duyurular, /yemekhane, /teacher dashboard',
-    'Konsolide hafiza: ~/.config/akademik-asistan/MEMORY.md',
-  ].join('\n');
+    'Slash komutları: /gundem, /bugun, /duyurular, /yemekhane, /teacher dashboard',
+    'Konsolide hafıza: ~/.config/akademik-asistan/MEMORY.md',
+  ].join('\n'));
 }
 
 export function renderProfile(profile: Profile, title = 'Aktif oturum'): string {
-  return [
+  return ui([
     divider(title),
     `Ad       : ${profile.fullName || '-'}`,
     `E-posta  : ${profile.email || '-'}`,
     `Rol      : ${profile.role || '-'}`,
     `Numara   : ${profile.studentNumber || '-'}`,
-  ].join('\n');
+  ].join('\n'));
 }
 
 export function renderAgenda(payload: AgendaPayload): string {
-  return [
+  return ui([
     divider(`${payload.title} • ${payload.summary.label}`),
     `${payload.now} (${payload.timezone})`,
     '',
     ...payload.sections.map(renderSection),
-  ].join('\n\n');
+  ].join('\n\n'));
 }
 
 export function renderAnnouncements(payload: AnnouncementsPayload): string {
   const body = payload.items.length > 0
     ? payload.items.map((item) => `- ${item.title}\n  ${item.date}\n  ${item.url}`).join('\n\n')
-    : 'Gosterilecek duyuru yok.';
+    : 'Gösterilecek duyuru yok.';
 
-  return [
+  return ui([
     divider(`Duyurular • ${payload.count}`),
     payload.lastScraped ? `Son scrape: ${payload.lastScraped}` : 'Son scrape bilgisi yok',
     '',
     body,
-  ].join('\n');
+  ].join('\n'));
 }
 
 export function renderCafeteria(payload: CafeteriaPayload): string {
-  return [
-    divider(`Yemekhane • ${payload.day === 'tomorrow' ? 'yarin' : 'bugun'}`),
+  return ui([
+    divider(`Yemekhane • ${payload.day === 'tomorrow' ? 'yarın' : 'bugün'}`),
     `Tarih: ${payload.targetDate}`,
-    payload.source?.fetchedAt ? `Guncelleme: ${payload.source.fetchedAt}` : 'Guncelleme bilgisi yok',
+    payload.source?.fetchedAt ? `Güncelleme: ${payload.source.fetchedAt}` : 'Güncelleme bilgisi yok',
     '',
     payload.menu
       ? payload.menu.items.map((item) => `- ${item}`).join('\n')
-      : 'Secilen gun icin menu bulunamadi.',
-  ].join('\n');
+      : 'Seçilen gün için menü bulunamadı.',
+  ].join('\n'));
 }
 
 export function renderTeacherDashboard(payload: TeacherDashboardPayload): string {
@@ -148,13 +155,13 @@ export function renderTeacherDashboard(payload: TeacherDashboardPayload): string
     ].join('\n');
   }).join('\n\n');
 
-  return [
+  return ui([
     divider(payload.title),
-    `Supheli yoklama: ${payload.counts.suspiciousRecords}`,
-    `Guvenlik logu  : ${payload.counts.securityLogs}`,
+    `Şüpheli yoklama: ${payload.counts.suspiciousRecords}`,
+    `Güvenlik logu  : ${payload.counts.securityLogs}`,
     '',
     sections,
-  ].join('\n');
+  ].join('\n'));
 }
 
 export function renderCommandResult(commandId: CommandId, result: CommandResult): string {
@@ -164,7 +171,7 @@ export function renderCommandResult(commandId: CommandId, result: CommandResult)
 
   switch (result.kind) {
     case 'profile':
-      return renderProfile(result.data, commandId === 'login' ? 'Baglandi' : 'Aktif oturum');
+      return renderProfile(result.data, commandId === 'login' ? 'Bağlandı' : 'Aktif oturum');
     case 'agenda':
       return renderAgenda(result.data);
     case 'announcements':
@@ -174,11 +181,11 @@ export function renderCommandResult(commandId: CommandId, result: CommandResult)
     case 'teacher-dashboard':
       return renderTeacherDashboard(result.data);
     case 'watch':
-      return result.data;
+      return ui(result.data);
     case 'json':
       return JSON.stringify(result.data, null, 2);
     case 'text':
     default:
-      return result.data;
+      return ui(result.data);
   }
 }

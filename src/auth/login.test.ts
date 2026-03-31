@@ -48,6 +48,27 @@ test('accepts valid callback payload', () => {
   assert.equal(result.payload?.user?.id, 'user-id');
 });
 
+test('accepts valid form-encoded callback payload', () => {
+  const result = buildLoopbackCallbackResult(
+    {
+      method: 'POST',
+      url: '/callback',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'text/html',
+      },
+    },
+    'test-state',
+    `payload=${encodeURIComponent(validPayload)}`,
+  );
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.headers['Content-Type'], 'text/html; charset=utf-8');
+  assert.ok(result.payload);
+  assert.equal(result.payload?.user?.id, 'user-id');
+  assert.match(result.body, /CLI oturumu bağlandı/);
+});
+
 test('rejects callback with wrong state', () => {
   const result = buildLoopbackCallbackResult(
     {

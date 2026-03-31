@@ -32,6 +32,73 @@ function buildJsonResponse(statusCode: number, payload: unknown) {
   return JSON.stringify(payload, null, 2);
 }
 
+function buildHtmlResponse(title: string, message: string, tone: 'success' | 'error') {
+  const accent = tone === 'success' ? '#34d399' : '#fb7185';
+  const safeTitle = title.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const safeMessage = message.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+  return `<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${safeTitle}</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top, #10203a 0%, #091224 45%, #020617 100%);
+        color: #f8fafc;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(92vw, 36rem);
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(2, 6, 23, .82);
+        border-radius: 28px;
+        padding: 28px;
+        box-shadow: 0 24px 80px rgba(0,0,0,.42);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.06);
+        padding: .4rem .8rem;
+        font-size: .8rem;
+        color: #cbd5e1;
+      }
+      h1 {
+        margin: 1rem 0 .75rem;
+        font-size: clamp(1.8rem, 4vw, 2.6rem);
+        line-height: 1.1;
+      }
+      p {
+        margin: 0;
+        color: #cbd5e1;
+        line-height: 1.7;
+      }
+      strong {
+        color: ${accent};
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="pill">Akademik Asistan CLI</div>
+      <h1>${safeTitle}</h1>
+      <p>${safeMessage}</p>
+    </main>
+  </body>
+</html>`;
+}
+
 function buildLoopbackHeaders(request: http.IncomingMessage): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json; charset=utf-8',
@@ -39,6 +106,7 @@ function buildLoopbackHeaders(request: http.IncomingMessage): Record<string, str
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '600',
+    'Cache-Control': 'no-store',
   };
 
   if (request.headers['access-control-request-private-network'] === 'true') {
@@ -48,28 +116,70 @@ function buildLoopbackHeaders(request: http.IncomingMessage): Record<string, str
   return headers;
 }
 
+function isFormEncodedRequest(request: Pick<http.IncomingMessage, 'headers'>) {
+  const contentType = request.headers['content-type'];
+  return typeof contentType === 'string' && contentType.toLowerCase().startsWith('application/x-www-form-urlencoded');
+}
+
+function shouldRespondWithHtml(request: Pick<http.IncomingMessage, 'headers'>) {
+  if (isFormEncodedRequest(request)) {
+    return true;
+  }
+
+  const accept = request.headers.accept;
+  return typeof accept === 'string' && accept.toLowerCase().includes('text/html');
+}
+
+function parseCallbackPayload(
+  request: Pick<http.IncomingMessage, 'headers'>,
+  rawBody: string,
+): LoginCallbackPayload {
+  if (isFormEncodedRequest(request)) {
+    const params = new URLSearchParams(rawBody);
+    const payload = params.get('payload');
+    if (!payload) {
+      throw new Error('Eksik form payload');
+    }
+    return JSON.parse(payload) as LoginCallbackPayload;
+  }
+
+  return JSON.parse(rawBody) as LoginCallbackPayload;
+}
+
 export function buildLoopbackCallbackResult(
   request: Pick<http.IncomingMessage, 'method' | 'url' | 'headers'>,
   state: string,
   rawBody = '',
 ): LoopbackCallbackResult {
   const headers = buildLoopbackHeaders(request as http.IncomingMessage);
+  const wantsHtml = shouldRespondWithHtml(request);
+
+  const respondError = (statusCode: number, message: string) => {
+    if (wantsHtml) {
+      return {
+        statusCode,
+        headers: {
+          ...headers,
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+        body: buildHtmlResponse('CLI bağlantısı kurulamadı', message, 'error'),
+      };
+    }
+
+    return {
+      statusCode,
+      headers,
+      body: buildJsonResponse(statusCode, { error: message }),
+    };
+  };
 
   if (!request.url) {
-    return {
-      statusCode: 400,
-      headers,
-      body: buildJsonResponse(400, { error: 'İstek URL bilgisi eksik.' }),
-    };
+    return respondError(400, 'İstek URL bilgisi eksik.');
   }
 
   const url = new URL(request.url, 'http://127.0.0.1');
   if (url.pathname !== '/callback') {
-    return {
-      statusCode: 404,
-      headers,
-      body: buildJsonResponse(404, { error: 'İstenen yol bulunamadı.' }),
-    };
+    return respondError(404, 'İstenen yol bulunamadı.');
   }
 
   if (request.method === 'OPTIONS') {
@@ -81,42 +191,41 @@ export function buildLoopbackCallbackResult(
   }
 
   if (request.method !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: buildJsonResponse(405, { error: 'Yönteme izin verilmiyor.' }),
-    };
+    return respondError(405, 'Yönteme izin verilmiyor.');
   }
 
   try {
-    const parsed = JSON.parse(rawBody) as LoginCallbackPayload;
+    const parsed = parseCallbackPayload(request, rawBody);
     if (parsed.state !== state) {
-      return {
-        statusCode: 400,
-        headers,
-        body: buildJsonResponse(400, { error: 'State doğrulaması başarısız.' }),
-      };
+      return respondError(400, 'State doğrulaması başarısız.');
     }
 
     if (!parsed.session?.access_token || !parsed.session?.refresh_token || !parsed.user?.id) {
-      return {
-        statusCode: 400,
-        headers,
-        body: buildJsonResponse(400, { error: 'Eksik session payload' }),
-      };
+      return respondError(400, 'Eksik session payload');
     }
+
+    const successHeaders = wantsHtml
+      ? {
+          ...headers,
+          'Content-Type': 'text/html; charset=utf-8',
+        }
+      : headers;
 
     return {
       statusCode: 200,
-      headers,
-      body: buildJsonResponse(200, { ok: true }),
+      headers: successHeaders,
+      body: wantsHtml
+        ? buildHtmlResponse(
+            'CLI oturumu bağlandı',
+            'Terminale dönebilirsiniz. Şimdi <strong>aasistan whoami</strong> veya <strong>aasistan gundem</strong> çalıştırın.',
+            'success',
+          )
+        : buildJsonResponse(200, { ok: true }),
       payload: parsed,
     };
   } catch (error) {
     return {
-      statusCode: 400,
-      headers,
-      body: buildJsonResponse(400, { error: 'JSON payload çözümlenemedi.' }),
+      ...respondError(400, 'JSON payload çözümlenemedi.'),
       error: error instanceof Error ? error : new Error('JSON payload çözümlenemedi.'),
     };
   }

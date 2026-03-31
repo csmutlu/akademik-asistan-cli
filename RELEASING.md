@@ -15,8 +15,8 @@ The Homebrew formula now points to a GitHub release asset, not the npm registry 
 Push a version tag:
 
 ```bash
-git tag cli-v0.1.2
-git push origin cli-v0.1.2
+git tag cli-v0.1.3
+git push origin cli-v0.1.3
 ```
 
 The release workflow will:
@@ -52,8 +52,8 @@ csmutlu/akademik-asistan-cli
 After npm trusted publishing is connected to this repository, every new tag release can publish automatically:
 
 ```bash
-git tag cli-v0.1.2
-git push origin cli-v0.1.2
+git tag cli-v0.1.3
+git push origin cli-v0.1.3
 ```
 
 Manual local fallback still works with npm authentication:
@@ -95,7 +95,7 @@ brew install csmutlu/akademik-asistan-cli/akademik-asistan
 After the tag workflow finishes, verify:
 
 ```bash
-curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.2/aasistan-0.1.2.tgz
+curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.3/aasistan-0.1.3.tgz
 brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
 brew install csmutlu/akademik-asistan-cli/akademik-asistan
 aasistan help

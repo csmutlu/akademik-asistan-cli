@@ -12,8 +12,106 @@ type LoginCallbackPayload = {
   user?: CliUser;
 };
 
+type LoopbackCallbackResult = {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: string;
+  payload?: LoginCallbackPayload;
+  error?: Error;
+};
+
 function buildJsonResponse(statusCode: number, payload: unknown) {
   return JSON.stringify(payload, null, 2);
+}
+
+function buildLoopbackHeaders(request: http.IncomingMessage): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '600',
+  };
+
+  if (request.headers['access-control-request-private-network'] === 'true') {
+    headers['Access-Control-Allow-Private-Network'] = 'true';
+  }
+
+  return headers;
+}
+
+export function buildLoopbackCallbackResult(
+  request: Pick<http.IncomingMessage, 'method' | 'url' | 'headers'>,
+  state: string,
+  rawBody = '',
+): LoopbackCallbackResult {
+  const headers = buildLoopbackHeaders(request as http.IncomingMessage);
+
+  if (!request.url) {
+    return {
+      statusCode: 400,
+      headers,
+      body: buildJsonResponse(400, { error: 'Missing request URL' }),
+    };
+  }
+
+  const url = new URL(request.url, 'http://127.0.0.1');
+  if (url.pathname !== '/callback') {
+    return {
+      statusCode: 404,
+      headers,
+      body: buildJsonResponse(404, { error: 'Not found' }),
+    };
+  }
+
+  if (request.method === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers,
+      body: '',
+    };
+  }
+
+  if (request.method !== 'POST') {
+    return {
+      statusCode: 405,
+      headers,
+      body: buildJsonResponse(405, { error: 'Method not allowed' }),
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(rawBody) as LoginCallbackPayload;
+    if (parsed.state !== state) {
+      return {
+        statusCode: 400,
+        headers,
+        body: buildJsonResponse(400, { error: 'State mismatch' }),
+      };
+    }
+
+    if (!parsed.session?.access_token || !parsed.session?.refresh_token || !parsed.user?.id) {
+      return {
+        statusCode: 400,
+        headers,
+        body: buildJsonResponse(400, { error: 'Eksik session payload' }),
+      };
+    }
+
+    return {
+      statusCode: 200,
+      headers,
+      body: buildJsonResponse(200, { ok: true }),
+      payload: parsed,
+    };
+  } catch (error) {
+    return {
+      statusCode: 400,
+      headers,
+      body: buildJsonResponse(400, { error: 'Invalid JSON payload' }),
+      error: error instanceof Error ? error : new Error('Invalid JSON payload'),
+    };
+  }
 }
 
 export async function loginWithBrowser(api: ApiClient): Promise<Profile> {
@@ -21,48 +119,28 @@ export async function loginWithBrowser(api: ApiClient): Promise<Profile> {
 
   const payload = await new Promise<LoginCallbackPayload>((resolve, reject) => {
     const server = http.createServer((request, response) => {
-      if (!request.url) {
-        response.statusCode = 400;
-        response.end(buildJsonResponse(400, { error: 'Missing request URL' }));
-        return;
-      }
-
-      const url = new URL(request.url, 'http://127.0.0.1');
-      if (request.method !== 'POST' || url.pathname !== '/callback') {
-        response.statusCode = 404;
-        response.setHeader('Content-Type', 'application/json; charset=utf-8');
-        response.end(buildJsonResponse(404, { error: 'Not found' }));
+      if (request.method === 'OPTIONS') {
+        const result = buildLoopbackCallbackResult(request, state);
+        response.writeHead(result.statusCode, result.headers);
+        response.end(result.body);
         return;
       }
 
       const chunks: Buffer[] = [];
       request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
       request.on('end', () => {
-        try {
-          const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as LoginCallbackPayload;
-          if (parsed.state !== state) {
-            response.statusCode = 400;
-            response.setHeader('Content-Type', 'application/json; charset=utf-8');
-            response.end(buildJsonResponse(400, { error: 'State mismatch' }));
-            return;
-          }
-          if (!parsed.session?.access_token || !parsed.session?.refresh_token || !parsed.user?.id) {
-            response.statusCode = 400;
-            response.setHeader('Content-Type', 'application/json; charset=utf-8');
-            response.end(buildJsonResponse(400, { error: 'Eksik session payload' }));
-            return;
-          }
+        const result = buildLoopbackCallbackResult(request, state, Buffer.concat(chunks).toString('utf8'));
+        response.writeHead(result.statusCode, result.headers);
+        response.end(result.body);
 
-          response.statusCode = 200;
-          response.setHeader('Content-Type', 'application/json; charset=utf-8');
-          response.end(buildJsonResponse(200, { ok: true }));
-          resolve(parsed);
+        if (result.payload) {
+          resolve(result.payload);
           server.close();
-        } catch (error) {
-          response.statusCode = 400;
-          response.setHeader('Content-Type', 'application/json; charset=utf-8');
-          response.end(buildJsonResponse(400, { error: 'Invalid JSON payload' }));
-          reject(error);
+          return;
+        }
+
+        if (result.error) {
+          reject(result.error);
           server.close();
         }
       });

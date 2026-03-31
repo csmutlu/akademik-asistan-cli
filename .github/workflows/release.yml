@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -33,7 +34,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: package-lock.json
@@ -59,14 +60,7 @@ jobs:
 
       - name: Publish to npm
         if: ${{ github.event_name == 'push' || github.event.inputs.publish_npm == 'true' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "NPM_TOKEN not configured. Skipping npm publish."
-            exit 0
-          fi
-
           npm publish --access public
 
       - name: Generate Homebrew formula

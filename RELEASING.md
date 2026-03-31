@@ -33,22 +33,35 @@ Workflow file:
 .github/workflows/cli-release.yml
 ```
 
-## 3. Publish to npm (optional)
+## 3. Publish to npm
 
-Local publish requires npm authentication first:
+Preferred path: npm trusted publishing with GitHub Actions.
 
-```bash
-npm adduser
-npm publish --access public
-```
-
-The package name is:
+Package name:
 
 ```bash
 aasistan
 ```
 
-If the repository has an `NPM_TOKEN` secret, the GitHub release workflow can do this automatically.
+Repository:
+
+```bash
+csmutlu/akademik-asistan-cli
+```
+
+After npm trusted publishing is connected to this repository, every new tag release can publish automatically:
+
+```bash
+git tag cli-v0.1.2
+git push origin cli-v0.1.2
+```
+
+Manual local fallback still works with npm authentication:
+
+```bash
+npm adduser
+npm publish --access public
+```
 
 ## 4. Generate or refresh the Homebrew formula locally
 

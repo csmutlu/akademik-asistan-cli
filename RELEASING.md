@@ -73,7 +73,8 @@ https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v<version>
 Homebrew install command:
 
 ```bash
-brew install --formula https://raw.githubusercontent.com/csmutlu/akademik-asistan-cli/main/Formula/akademik-asistan.rb
+brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
+brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 
 ## 5. Manual release verification
@@ -82,6 +83,7 @@ After the tag workflow finishes, verify:
 
 ```bash
 curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.0/akademik-asistan-cli-0.1.0.tgz
-brew install --formula https://raw.githubusercontent.com/csmutlu/akademik-asistan-cli/main/Formula/akademik-asistan.rb
+brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
+brew install csmutlu/akademik-asistan-cli/akademik-asistan
 akademik-asistan help
 ```

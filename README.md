@@ -7,7 +7,8 @@ Public npm package for the Akademik Asistan terminal experience.
 ### Homebrew
 
 ```bash
-brew install --formula https://raw.githubusercontent.com/csmutlu/akademik-asistan-cli/main/Formula/akademik-asistan.rb
+brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
+brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 
 This installs the stable command:

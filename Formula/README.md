@@ -6,6 +6,12 @@ Canonical install command after a tagged GitHub release:
 
 ```bash
 brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
+brew install aasistan
+```
+
+Without adding the tap first, users can still install with the fully qualified formula name:
+
+```bash
 brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 

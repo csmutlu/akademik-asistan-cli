@@ -8,7 +8,7 @@ Public npm package for the Akademik Asistan terminal experience.
 
 ```bash
 brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
-brew install csmutlu/akademik-asistan-cli/akademik-asistan
+brew install aasistan
 ```
 
 This installs both commands:
@@ -16,6 +16,12 @@ This installs both commands:
 ```bash
 aasistan
 akademik-asistan
+```
+
+If you do not want to add the tap first, the fully qualified fallback is:
+
+```bash
+brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 
 ### npm

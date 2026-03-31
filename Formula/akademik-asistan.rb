@@ -13,7 +13,13 @@ class AkademikAsistan < Formula
 
     libexec.install package_dir/"dist"
     libexec.install package_dir/"package.json"
+    libexec.install package_dir/"package-lock.json" if (package_dir/"package-lock.json").exist?
     libexec.install package_dir/"README.md"
+
+    cd libexec do
+      system "npm", "install", "--omit=dev"
+    end
+
     bin.install_symlink libexec/"dist/index.js" => "akademik-asistan"
   end
 

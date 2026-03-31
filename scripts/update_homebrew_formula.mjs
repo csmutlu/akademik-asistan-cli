@@ -61,7 +61,12 @@ const formula = `class AkademikAsistan < Formula
   depends_on "node"
 
   def install
-    libexec.install Dir["package/*"]
+    package_dir = buildpath/"package"
+    package_dir = buildpath unless package_dir.directory?
+
+    libexec.install package_dir/"dist"
+    libexec.install package_dir/"package.json"
+    libexec.install package_dir/"README.md"
     bin.install_symlink libexec/"dist/index.js" => "akademik-asistan"
   end
 

@@ -31,7 +31,8 @@ const repositoryOwner = repositoryMatch?.[1];
 const repositoryName = repositoryMatch?.[2];
 const formulaDir = path.join(repoRoot, 'Formula');
 const formulaPath = path.join(formulaDir, 'akademik-asistan.rb');
-const tgzFileName = `akademik-asistan-cli-${version}.tgz`;
+const tarballBaseName = packageName.replace(/^@/, '').replace(/\//g, '-');
+const tgzFileName = `${tarballBaseName}-${version}.tgz`;
 const tgzPath = path.join(repoRoot, tgzFileName);
 
 if (!existsSync(tgzPath)) {

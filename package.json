@@ -1,6 +1,6 @@
 {
-  "name": "@akademik-asistan/cli",
-  "version": "0.1.1",
+  "name": "aasistan",
+  "version": "0.1.2",
   "description": "Akademik Asistan command line interface",
   "type": "module",
   "repository": {

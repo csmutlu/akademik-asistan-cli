@@ -27,7 +27,7 @@ brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ### npm
 
 ```bash
-npm i -g @akademik-asistan/cli
+npm i -g aasistan
 ```
 
 The short command is now:

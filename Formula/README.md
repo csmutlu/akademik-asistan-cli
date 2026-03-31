@@ -24,7 +24,7 @@ node scripts/update_homebrew_formula.mjs
 The generated formula points to a GitHub release asset:
 
 ```text
-https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v<version>/akademik-asistan-cli-<version>.tgz
+https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v<version>/aasistan-<version>.tgz
 ```
 
 It installs both commands:

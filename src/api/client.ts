@@ -66,7 +66,7 @@ export class ApiClient {
   async refreshSession(force = false): Promise<StoredSession> {
     const stored = await readSession();
     if (!stored) {
-      throw new AuthRequiredError('Oturum bulunamadi. `akademik-asistan login` calistir.');
+      throw new AuthRequiredError('Oturum bulunamadi. `aasistan login` veya `akademik-asistan login` calistir.');
     }
 
     if (!force && !this.isExpiring(stored.session)) {
@@ -126,7 +126,7 @@ export class ApiClient {
   private async getValidStoredSession(): Promise<StoredSession> {
     const stored = await readSession();
     if (!stored) {
-      throw new AuthRequiredError('Oturum bulunamadi. `akademik-asistan login` calistir.');
+      throw new AuthRequiredError('Oturum bulunamadi. `aasistan login` veya `akademik-asistan login` calistir.');
     }
 
     if (this.isExpiring(stored.session)) {

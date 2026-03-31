@@ -73,21 +73,20 @@ const formula = `class AkademikAsistan < Formula
       system "npm", "install", "--omit=dev"
     end
 
+    bin.install_symlink libexec/"dist/index.js" => "aasistan"
     bin.install_symlink libexec/"dist/index.js" => "akademik-asistan"
   end
 
   test do
-    output = shell_output("#{bin}/akademik-asistan help")
+    output = shell_output("#{bin}/aasistan help")
     assert_match "Akademik Asistan CLI", output
   end
 
   def caveats
     <<~EOS
-      The Homebrew build installs the stable command:
+      Installed commands:
+        aasistan
         akademik-asistan
-
-      The short aa alias is intentionally omitted because macOS ships a
-      conflicting /usr/bin/aa binary.
     EOS
   end
 end

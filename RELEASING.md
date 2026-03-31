@@ -15,8 +15,8 @@ The Homebrew formula now points to a GitHub release asset, not the npm registry 
 Push a version tag:
 
 ```bash
-git tag cli-v0.1.0
-git push origin cli-v0.1.0
+git tag cli-v0.1.1
+git push origin cli-v0.1.1
 ```
 
 The release workflow will:
@@ -82,8 +82,8 @@ brew install csmutlu/akademik-asistan-cli/akademik-asistan
 After the tag workflow finishes, verify:
 
 ```bash
-curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.0/akademik-asistan-cli-0.1.0.tgz
+curl -I https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.1/akademik-asistan-cli-0.1.1.tgz
 brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asistan-cli
 brew install csmutlu/akademik-asistan-cli/akademik-asistan
-akademik-asistan help
+aasistan help
 ```

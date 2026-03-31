@@ -21,10 +21,9 @@ The generated formula points to a GitHub release asset:
 https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v<version>/akademik-asistan-cli-<version>.tgz
 ```
 
-It intentionally installs only the long command:
+It installs both commands:
 
 ```bash
+aasistan
 akademik-asistan
 ```
-
-The short `aa` alias is not installed via Homebrew because macOS already ships a conflicting `/usr/bin/aa`.

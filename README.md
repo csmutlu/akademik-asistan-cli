@@ -11,9 +11,10 @@ brew tap csmutlu/akademik-asistan-cli https://github.com/csmutlu/akademik-asista
 brew install csmutlu/akademik-asistan-cli/akademik-asistan
 ```
 
-This installs the stable command:
+This installs both commands:
 
 ```bash
+aasistan
 akademik-asistan
 ```
 
@@ -23,26 +24,30 @@ akademik-asistan
 npm i -g @akademik-asistan/cli
 ```
 
-On macOS, the short `aa` command may conflict with Apple's built-in archive tool. The safest command is always `akademik-asistan`. If you want `aa`, ensure your npm global bin directory comes before `/usr/bin`.
+The short command is now:
+
+```bash
+aasistan
+```
 
 ## Commands
 
 ```bash
-akademik-asistan login
-akademik-asistan whoami
-akademik-asistan gundem
-akademik-asistan bugun
-akademik-asistan duyurular
-akademik-asistan yemekhane --day tomorrow
-akademik-asistan teacher dashboard
-akademik-asistan watch
-akademik-asistan --json gundem
+aasistan login
+aasistan whoami
+aasistan gundem
+aasistan bugun
+aasistan duyurular
+aasistan yemekhane --day tomorrow
+aasistan teacher dashboard
+aasistan watch
+aasistan --json gundem
 ```
 
 ## TUI
 
 ```bash
-akademik-asistan
+aasistan
 ```
 
 Inside the interface:
@@ -56,7 +61,5 @@ Inside the interface:
 
 ## Extras
 
-- `akademik-asistan watch` runs a brief always-on poller for agenda and announcement changes
+- `aasistan watch` runs a brief always-on poller for agenda and announcement changes
 - local memory consolidation is written to `~/.config/akademik-asistan/MEMORY.md`
-
-If your shell is configured so that `aa` resolves to this package, the same commands also work with the short alias.

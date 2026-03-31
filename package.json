@@ -1,0 +1,55 @@
+{
+  "name": "@akademik-asistan/cli",
+  "version": "0.1.0",
+  "description": "Akademik Asistan command line interface",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/csmutlu/akademik-asistan-cli.git"
+  },
+  "homepage": "https://github.com/csmutlu/akademik-asistan-cli",
+  "bugs": {
+    "url": "https://github.com/csmutlu/akademik-asistan-cli/issues"
+  },
+  "bin": {
+    "aa": "dist/index.js",
+    "akademik-asistan": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "dev": "tsx src/index.tsx",
+    "test": "tsx --test src/**/*.test.ts",
+    "pack:dry": "npm pack --dry-run",
+    "prepack": "npm run build && npm test"
+  },
+  "keywords": [
+    "cli",
+    "education",
+    "supabase",
+    "akademik-asistan"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ink": "^6.5.1",
+    "ink-text-input": "^6.0.0",
+    "open": "^10.2.0",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

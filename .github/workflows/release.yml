@@ -1,0 +1,87 @@
+name: CLI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_npm:
+        description: "Publish package to npm"
+        required: false
+        default: "false"
+      update_formula:
+        description: "Generate Homebrew formula after publish"
+        required: false
+        default: "true"
+  push:
+    tags:
+      - "cli-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI
+        run: npm run build
+
+      - name: Test CLI
+        run: npm test
+
+      - name: Pack tarball
+        run: npm pack
+
+      - name: Create GitHub release and upload CLI tarball
+        if: ${{ github.event_name == 'push' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tgz"
+          generate_release_notes: true
+
+      - name: Publish to npm
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_npm == 'true' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN not configured. Skipping npm publish."
+            exit 0
+          fi
+
+          npm publish --access public
+
+      - name: Generate Homebrew formula
+        if: ${{ github.event_name == 'push' || github.event.inputs.update_formula == 'true' }}
+        run: node scripts/update_homebrew_formula.mjs
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-tarball
+          path: "*.tgz"
+
+      - name: Upload Homebrew formula artifact
+        if: ${{ github.event_name == 'push' || github.event.inputs.update_formula == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-homebrew-formula
+          path: Formula/akademik-asistan.rb

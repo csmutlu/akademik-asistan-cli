@@ -1,85 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLoopbackCallbackResult } from './login.js';
+import { buildFallbackProfile, secondsUntil } from './login.js';
 
-const validPayload = JSON.stringify({
-  state: 'test-state',
-  session: {
-    access_token: 'access-token',
-    refresh_token: 'refresh-token',
-  },
-  user: {
-    id: 'user-id',
-  },
+test('secondsUntil returns null when no expiry is provided', () => {
+  assert.equal(secondsUntil(null), null);
 });
 
-test('allows CORS preflight for loopback callback', () => {
-  const result = buildLoopbackCallbackResult(
-    {
-      method: 'OPTIONS',
-      url: '/callback',
-      headers: {
-        'access-control-request-private-network': 'true',
-      },
-    },
-    'test-state',
-  );
-
-  assert.equal(result.statusCode, 204);
-  assert.equal(result.headers['Access-Control-Allow-Origin'], '*');
-  assert.equal(result.headers['Access-Control-Allow-Methods'], 'POST, OPTIONS');
-  assert.equal(result.headers['Access-Control-Allow-Private-Network'], 'true');
-  assert.equal(result.body, '');
+test('secondsUntil never returns a negative value', () => {
+  const past = new Date(Date.now() - 10_000).toISOString();
+  assert.equal(secondsUntil(past), 0);
 });
 
-test('accepts valid callback payload', () => {
-  const result = buildLoopbackCallbackResult(
-    {
-      method: 'POST',
-      url: '/callback',
-      headers: {},
+test('buildFallbackProfile keeps redeemed user identity', () => {
+  const profile = buildFallbackProfile({
+    status: 'approved',
+    expiresAt: new Date().toISOString(),
+    user: {
+      id: 'user-1',
+      email: 'test@example.com',
     },
-    'test-state',
-    validPayload,
-  );
-
-  assert.equal(result.statusCode, 200);
-  assert.ok(result.payload);
-  assert.equal(result.payload?.user?.id, 'user-id');
-});
-
-test('accepts valid form-encoded callback payload', () => {
-  const result = buildLoopbackCallbackResult(
-    {
-      method: 'POST',
-      url: '/callback',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'text/html',
-      },
+    session: {
+      access_token: 'access',
+      refresh_token: 'refresh',
     },
-    'test-state',
-    `payload=${encodeURIComponent(validPayload)}`,
-  );
+  });
 
-  assert.equal(result.statusCode, 200);
-  assert.equal(result.headers['Content-Type'], 'text/html; charset=utf-8');
-  assert.ok(result.payload);
-  assert.equal(result.payload?.user?.id, 'user-id');
-  assert.match(result.body, /CLI oturumu bağlandı/);
-});
-
-test('rejects callback with wrong state', () => {
-  const result = buildLoopbackCallbackResult(
-    {
-      method: 'POST',
-      url: '/callback',
-      headers: {},
-    },
-    'expected-state',
-    validPayload,
-  );
-
-  assert.equal(result.statusCode, 400);
-  assert.match(result.body, /State doğrulaması başarısız/);
+  assert.deepEqual(profile, {
+    id: 'user-1',
+    email: 'test@example.com',
+    fullName: null,
+    studentNumber: null,
+    role: 'unknown',
+  });
 });

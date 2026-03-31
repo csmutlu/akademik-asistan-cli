@@ -28,6 +28,42 @@ export type CliUser = {
   email?: string | null;
 };
 
+export type CliLoginRequest = {
+  requestId: string;
+  userCode: string;
+  pollToken: string;
+  verificationUrl: string;
+  expiresAt: string;
+  intervalMs: number;
+};
+
+export type CliLoginStatus =
+  | 'pending'
+  | 'approved'
+  | 'redeemed'
+  | 'expired'
+  | 'cancelled';
+
+export type CliLoginRedeemPayload = {
+  status: CliLoginStatus;
+  expiresAt: string;
+  approvedAt?: string | null;
+  session?: CliSession;
+  user?: CliUser;
+  error?: string;
+};
+
+export type CliLoginRequestSummary = {
+  requestId: string;
+  userCode: string;
+  status: CliLoginStatus;
+  expiresAt: string;
+  approvedAt?: string | null;
+  redeemedAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt?: string;
+};
+
 export type StoredSession = {
   session: CliSession;
   user: CliUser;

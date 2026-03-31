@@ -3,6 +3,8 @@ import { clearSession, readSession, writeSession } from '../state/storage.js';
 import type {
   AgendaPayload,
   CafeteriaPayload,
+  CliLoginRedeemPayload,
+  CliLoginRequest,
   CliSession,
   Profile,
   StoredSession,
@@ -44,6 +46,55 @@ export class ApiClient {
 
   async clearStoredSession(): Promise<void> {
     await clearSession();
+  }
+
+  async createCliLoginRequest(): Promise<CliLoginRequest> {
+    const response = await fetch(`${this.baseUrl}/auth/cli/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as CliLoginRequest & { error?: string };
+    if (!response.ok) {
+      throw new ApiError(payload.error || 'CLI login isteği oluşturulamadı.', response.status);
+    }
+
+    return payload;
+  }
+
+  async redeemCliLoginRequest(requestId: string, pollToken: string): Promise<CliLoginRedeemPayload> {
+    const response = await fetch(`${this.baseUrl}/auth/cli/request/${encodeURIComponent(requestId)}/redeem`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pollToken }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as CliLoginRedeemPayload;
+    if (!response.ok) {
+      throw new ApiError(payload.error || 'CLI login isteği sorgulanamadı.', response.status);
+    }
+
+    return payload;
+  }
+
+  async cancelCliLoginRequest(requestId: string, pollToken: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/auth/cli/request/${encodeURIComponent(requestId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pollToken }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) {
+      throw new ApiError(payload.error || 'CLI login isteği iptal edilemedi.', response.status);
+    }
   }
 
   async logout(): Promise<void> {

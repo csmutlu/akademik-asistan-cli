@@ -7,8 +7,9 @@ export type LoginDebugEventType =
   | 'login-start'
   | 'login-url-generated'
   | 'browser-open-attempt'
-  | 'loopback-preflight'
-  | 'loopback-callback'
+  | 'request-created'
+  | 'approval-poll'
+  | 'request-cancelled'
   | 'session-stored'
   | 'profile-fetch'
   | 'login-error';
@@ -24,7 +25,8 @@ export type LoginDebugSummary = {
   logPath: string;
   lastTimestamp: string | null;
   lastUrl: string | null;
-  lastPort: string | null;
+  lastCode: string | null;
+  lastRequestId: string | null;
   lastError: string | null;
   lastEventType: LoginDebugEventType | null;
 };
@@ -72,7 +74,8 @@ export async function readLatestLoginDebugSummary(limitDays = 7): Promise<LoginD
           logPath: absolutePath,
           lastTimestamp: null,
           lastUrl: null,
-          lastPort: null,
+          lastCode: null,
+          lastRequestId: null,
           lastError: null,
           lastEventType: null,
         };
@@ -83,12 +86,16 @@ export async function readLatestLoginDebugSummary(limitDays = 7): Promise<LoginD
       summary.lastEventType = event.type;
 
       const url = typeof event.meta?.loginUrl === 'string' ? event.meta.loginUrl : null;
-      const port = event.meta?.port;
+      const code = event.meta?.userCode;
+      const requestId = event.meta?.requestId;
       if (url) {
         summary.lastUrl = url;
       }
-      if (typeof port === 'string' || typeof port === 'number') {
-        summary.lastPort = String(port);
+      if (typeof code === 'string') {
+        summary.lastCode = code;
+      }
+      if (typeof requestId === 'string') {
+        summary.lastRequestId = requestId;
       }
       if (event.type === 'login-error' && event.message) {
         summary.lastError = event.message;

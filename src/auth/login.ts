@@ -1,235 +1,25 @@
-import http from 'node:http';
-import { randomBytes } from 'node:crypto';
 import open from 'open';
-import { DEFAULT_WEB_BASE_URL, LOGIN_TIMEOUT_MS } from '../config.js';
-import { writeSession } from '../state/storage.js';
-import type { CliSession, CliUser, Profile, StoredSession } from '../types.js';
+import React from 'react';
+import { render } from 'ink';
 import { ApiClient, ApiError } from '../api/client.js';
+import { CLI_LOGIN_POLL_INTERVAL_MS, DEFAULT_WEB_BASE_URL, LOGIN_TIMEOUT_MS } from '../config.js';
 import { ui } from '../display.js';
 import { appendLoginDebugEvent, getLoginDebugLogPath } from '../logging/login-debug.js';
-
-type LoginCallbackPayload = {
-  state?: string;
-  session?: CliSession;
-  user?: CliUser;
-};
-
-type LoopbackCallbackResult = {
-  statusCode: number;
-  headers: Record<string, string>;
-  body: string;
-  payload?: LoginCallbackPayload;
-  error?: Error;
-};
+import { writeSession } from '../state/storage.js';
+import { LoginScreen, type LoginScreenState } from '../tui/LoginScreen.js';
+import type { CliLoginRequest, CliLoginRedeemPayload, Profile, StoredSession } from '../types.js';
 
 export type LoginOptions = {
   debug?: boolean;
   noOpen?: boolean;
   print?: (line: string) => void;
+  renderUi?: boolean;
 };
 
-function buildJsonResponse(statusCode: number, payload: unknown) {
-  return JSON.stringify(payload, null, 2);
-}
-
-function buildHtmlResponse(title: string, message: string, tone: 'success' | 'error') {
-  const accent = tone === 'success' ? '#34d399' : '#fb7185';
-  const safeTitle = title.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  const safeMessage = message.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-
-  return `<!doctype html>
-<html lang="tr">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${safeTitle}</title>
-    <style>
-      :root { color-scheme: dark; }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at top, #10203a 0%, #091224 45%, #020617 100%);
-        color: #f8fafc;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      main {
-        width: min(92vw, 36rem);
-        border: 1px solid rgba(255,255,255,.12);
-        background: rgba(2, 6, 23, .82);
-        border-radius: 28px;
-        padding: 28px;
-        box-shadow: 0 24px 80px rgba(0,0,0,.42);
-      }
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: .5rem;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,.12);
-        background: rgba(255,255,255,.06);
-        padding: .4rem .8rem;
-        font-size: .8rem;
-        color: #cbd5e1;
-      }
-      h1 {
-        margin: 1rem 0 .75rem;
-        font-size: clamp(1.8rem, 4vw, 2.6rem);
-        line-height: 1.1;
-      }
-      p {
-        margin: 0;
-        color: #cbd5e1;
-        line-height: 1.7;
-      }
-      strong {
-        color: ${accent};
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <div class="pill">Akademik Asistan CLI</div>
-      <h1>${safeTitle}</h1>
-      <p>${safeMessage}</p>
-    </main>
-  </body>
-</html>`;
-}
-
-function buildLoopbackHeaders(request: http.IncomingMessage): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '600',
-    'Cache-Control': 'no-store',
-  };
-
-  if (request.headers['access-control-request-private-network'] === 'true') {
-    headers['Access-Control-Allow-Private-Network'] = 'true';
-  }
-
-  return headers;
-}
-
-function isFormEncodedRequest(request: Pick<http.IncomingMessage, 'headers'>) {
-  const contentType = request.headers['content-type'];
-  return typeof contentType === 'string' && contentType.toLowerCase().startsWith('application/x-www-form-urlencoded');
-}
-
-function shouldRespondWithHtml(request: Pick<http.IncomingMessage, 'headers'>) {
-  if (isFormEncodedRequest(request)) {
-    return true;
-  }
-
-  const accept = request.headers.accept;
-  return typeof accept === 'string' && accept.toLowerCase().includes('text/html');
-}
-
-function parseCallbackPayload(
-  request: Pick<http.IncomingMessage, 'headers'>,
-  rawBody: string,
-): LoginCallbackPayload {
-  if (isFormEncodedRequest(request)) {
-    const params = new URLSearchParams(rawBody);
-    const payload = params.get('payload');
-    if (!payload) {
-      throw new Error('Eksik form payload');
-    }
-    return JSON.parse(payload) as LoginCallbackPayload;
-  }
-
-  return JSON.parse(rawBody) as LoginCallbackPayload;
-}
-
-export function buildLoopbackCallbackResult(
-  request: Pick<http.IncomingMessage, 'method' | 'url' | 'headers'>,
-  state: string,
-  rawBody = '',
-): LoopbackCallbackResult {
-  const headers = buildLoopbackHeaders(request as http.IncomingMessage);
-  const wantsHtml = shouldRespondWithHtml(request);
-
-  const respondError = (statusCode: number, message: string) => {
-    if (wantsHtml) {
-      return {
-        statusCode,
-        headers: {
-          ...headers,
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-        body: buildHtmlResponse('CLI bağlantısı kurulamadı', message, 'error'),
-      };
-    }
-
-    return {
-      statusCode,
-      headers,
-      body: buildJsonResponse(statusCode, { error: message }),
-    };
-  };
-
-  if (!request.url) {
-    return respondError(400, 'İstek URL bilgisi eksik.');
-  }
-
-  const url = new URL(request.url, 'http://127.0.0.1');
-  if (url.pathname !== '/callback') {
-    return respondError(404, 'İstenen yol bulunamadı.');
-  }
-
-  if (request.method === 'OPTIONS') {
-    return {
-      statusCode: 204,
-      headers,
-      body: '',
-    };
-  }
-
-  if (request.method !== 'POST') {
-    return respondError(405, 'Yönteme izin verilmiyor.');
-  }
-
-  try {
-    const parsed = parseCallbackPayload(request, rawBody);
-    if (parsed.state !== state) {
-      return respondError(400, 'State doğrulaması başarısız.');
-    }
-
-    if (!parsed.session?.access_token || !parsed.session?.refresh_token || !parsed.user?.id) {
-      return respondError(400, 'Eksik session payload');
-    }
-
-    const successHeaders = wantsHtml
-      ? {
-          ...headers,
-          'Content-Type': 'text/html; charset=utf-8',
-        }
-      : headers;
-
-    return {
-      statusCode: 200,
-      headers: successHeaders,
-      body: wantsHtml
-        ? buildHtmlResponse(
-            'CLI oturumu bağlandı',
-            'Terminale dönebilirsiniz. Şimdi <strong>aasistan whoami</strong> veya <strong>aasistan gundem</strong> çalıştırın.',
-            'success',
-          )
-        : buildJsonResponse(200, { ok: true }),
-      payload: parsed,
-    };
-  } catch (error) {
-    return {
-      ...respondError(400, 'JSON payload çözümlenemedi.'),
-      error: error instanceof Error ? error : new Error('JSON payload çözümlenemedi.'),
-    };
-  }
-}
+type LoginFlowHooks = {
+  onStateChange?: (patch: Partial<LoginScreenState>) => void;
+  isCancelled?: () => boolean;
+};
 
 function printLine(line: string, printer?: (line: string) => void) {
   const output = ui(line);
@@ -254,209 +44,343 @@ async function recordLoginEvent(
   }).catch(() => undefined);
 }
 
-export async function loginWithBrowser(api: ApiClient, options: LoginOptions = {}): Promise<Profile> {
-  const state = randomBytes(24).toString('hex');
+function formatExpiry(iso: string): string {
+  return new Date(iso).toLocaleString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+  });
+}
+
+export function secondsUntil(expiresAt: string | null): number | null {
+  if (!expiresAt) {
+    return null;
+  }
+  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000));
+}
+
+export function buildFallbackProfile(payload: CliLoginRedeemPayload): Profile {
+  return {
+    id: payload.user?.id || 'unknown',
+    email: payload.user?.email || null,
+    fullName: null,
+    studentNumber: null,
+    role: 'unknown',
+  };
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function openLoginUrl(loginUrl: string, printer?: (line: string) => void, debug?: boolean) {
+  try {
+    await open(loginUrl);
+    if (debug) {
+      printLine('[login] Varsayılan tarayıcı açıldı.', printer);
+    }
+    await recordLoginEvent('browser-open-attempt', 'Tarayıcı açıldı.', {
+      loginUrl,
+      success: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Tarayıcı açılamadı.';
+    printLine(`Tarayıcı otomatik açılamadı. Bağlantıyı kopyalayın: ${loginUrl}`, printer);
+    await recordLoginEvent('browser-open-attempt', message, {
+      loginUrl,
+      success: false,
+    });
+  }
+}
+
+async function cancelLoginRequest(api: ApiClient, request: CliLoginRequest | null) {
+  if (!request) {
+    return;
+  }
+
+  await api.cancelCliLoginRequest(request.requestId, request.pollToken).catch(() => undefined);
+  await recordLoginEvent('request-cancelled', 'CLI login isteği iptal edildi.', {
+    requestId: request.requestId,
+    userCode: request.userCode,
+  });
+}
+
+async function runLoginFlow(
+  api: ApiClient,
+  options: LoginOptions = {},
+  hooks: LoginFlowHooks = {},
+): Promise<Profile> {
   const debug = options.debug === true;
   const noOpen = options.noOpen === true;
   const printer = options.print;
+  const logPath = getLoginDebugLogPath();
 
-  const payload = await new Promise<LoginCallbackPayload>((resolve, reject) => {
-    const server = http.createServer((request, response) => {
-      const handleRequest = async () => {
-        if (request.method === 'OPTIONS') {
-          const result = buildLoopbackCallbackResult(request, state);
-          const address = server.address();
-          await recordLoginEvent(
-            'loopback-preflight',
-            'Loopback preflight isteği alındı.',
-            {
-              port: address && typeof address !== 'string' ? address.port : null,
-              allowPrivateNetwork: result.headers['Access-Control-Allow-Private-Network'] === 'true',
-            },
-          );
-          response.writeHead(result.statusCode, result.headers);
-          response.end(result.body);
-          return;
-        }
+  await recordLoginEvent('login-start', 'CLI login başlatıldı.', {
+    debug,
+    noOpen,
+    webBaseUrl: DEFAULT_WEB_BASE_URL,
+  });
 
-        const chunks: Buffer[] = [];
-        request.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-        request.on('end', async () => {
-          const address = server.address();
-          const port = address && typeof address !== 'string' ? address.port : null;
-          const result = buildLoopbackCallbackResult(request, state, Buffer.concat(chunks).toString('utf8'));
-          await recordLoginEvent(
-            'loopback-callback',
-            result.payload ? 'Loopback callback alındı.' : result.error?.message || 'Loopback callback reddedildi.',
-            {
-              port,
-              method: request.method,
-              statusCode: result.statusCode,
-              hasPayload: Boolean(result.payload),
-              userId: result.payload?.user?.id || null,
-            },
-          );
-          response.writeHead(result.statusCode, result.headers);
-          response.end(result.body);
+  hooks.onStateChange?.({
+    stage: 'creating',
+    statusMessage: 'Worker isteği hazırlanıyor...',
+    logPath,
+  });
 
-          if (result.payload) {
-            resolve(result.payload);
-            server.close();
+  const request = await api.createCliLoginRequest();
+  const loginUrl = request.verificationUrl.startsWith('http')
+    ? request.verificationUrl
+    : `${DEFAULT_WEB_BASE_URL.replace(/\/$/, '')}/cli-auth?request=${encodeURIComponent(request.requestId)}`;
+
+  await recordLoginEvent('request-created', 'CLI login isteği oluşturuldu.', {
+    requestId: request.requestId,
+    userCode: request.userCode,
+    expiresAt: request.expiresAt,
+  });
+  await recordLoginEvent('login-url-generated', 'Doğrulama bağlantısı üretildi.', {
+    requestId: request.requestId,
+    userCode: request.userCode,
+    loginUrl,
+  });
+
+  printLine(`Giriş bağlantısı: ${loginUrl}`, printer);
+  printLine(`Cihaz kodu: ${request.userCode}`, printer);
+  printLine(`Süre sonu: ${formatExpiry(request.expiresAt)}`, printer);
+
+  if (debug) {
+    printLine(`[login] İstek kimliği: ${request.requestId}`, printer);
+    printLine(`[login] Debug günlüğü: ${logPath}`, printer);
+  }
+
+  hooks.onStateChange?.({
+    stage: noOpen ? 'waiting' : 'opening',
+    statusMessage: noOpen ? 'Bağlantı hazır. Tarayıcıdan açılmayı bekliyor.' : 'Tarayıcı açılıyor...',
+    loginUrl,
+    userCode: request.userCode,
+    requestId: request.requestId,
+    expiresAt: request.expiresAt,
+    remainingSeconds: secondsUntil(request.expiresAt),
+    logPath,
+    attempts: 0,
+  });
+
+  if (!noOpen) {
+    await openLoginUrl(loginUrl, printer, debug);
+  }
+
+  hooks.onStateChange?.({
+    stage: 'waiting',
+    statusMessage: 'Web onayı bekleniyor...',
+  });
+
+  const intervalMs = Math.max(CLI_LOGIN_POLL_INTERVAL_MS, request.intervalMs || CLI_LOGIN_POLL_INTERVAL_MS);
+  const deadline = Date.now() + LOGIN_TIMEOUT_MS;
+  let attempts = 0;
+
+  while (Date.now() < deadline) {
+    if (hooks.isCancelled?.()) {
+      await cancelLoginRequest(api, request);
+      throw new Error('Giriş kullanıcı tarafından iptal edildi.');
+    }
+
+    attempts += 1;
+    const result = await api.redeemCliLoginRequest(request.requestId, request.pollToken);
+    await recordLoginEvent('approval-poll', `CLI login durumu: ${result.status}`, {
+      requestId: request.requestId,
+      userCode: request.userCode,
+      attempt: attempts,
+      status: result.status,
+    });
+
+    hooks.onStateChange?.({
+      stage: result.status === 'approved' ? 'redeeming' : 'waiting',
+      statusMessage:
+        result.status === 'approved'
+          ? 'Onay alındı, oturum kaydediliyor...'
+          : result.status === 'pending'
+            ? 'Web onayı bekleniyor...'
+            : 'İstek durumu güncellendi.',
+      attempts,
+      remainingSeconds: secondsUntil(result.expiresAt || request.expiresAt),
+      approvedAt: result.approvedAt || null,
+    });
+
+    if (result.status === 'pending') {
+      await sleep(intervalMs);
+      continue;
+    }
+
+    if (result.status === 'cancelled') {
+      throw new Error('CLI giriş isteği web tarafında iptal edildi.');
+    }
+
+    if (result.status === 'expired') {
+      throw new Error('CLI giriş isteğinin süresi doldu.');
+    }
+
+    if (result.status === 'redeemed') {
+      throw new Error('Bu CLI giriş isteği daha önce kullanılmış.');
+    }
+
+    if (!result.session?.access_token || !result.session.refresh_token || !result.user?.id) {
+      throw new Error(result.error || 'Onay alındı ancak session payload eksik.');
+    }
+
+    const stored: StoredSession = {
+      session: result.session,
+      user: result.user,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeSession(stored);
+    await recordLoginEvent('session-stored', 'CLI session diske yazıldı.', {
+      requestId: request.requestId,
+      userId: result.user.id,
+    });
+
+    try {
+      const profile = await api.getProfile();
+      await recordLoginEvent('profile-fetch', 'Profil başarıyla alındı.', {
+        requestId: request.requestId,
+        userId: profile.id,
+      });
+      return profile;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Profil alınamadı.';
+      await recordLoginEvent('profile-fetch', message, {
+        requestId: request.requestId,
+        failed: true,
+      });
+      return buildFallbackProfile(result);
+    }
+  }
+
+  await cancelLoginRequest(api, request);
+  throw new Error('CLI login isteği zaman aşımına uğradı.');
+}
+
+async function loginWithInk(api: ApiClient, options: LoginOptions): Promise<Profile> {
+  const debug = options.debug === true;
+
+  return new Promise<Profile>((resolve, reject) => {
+    let finished = false;
+    let cancelled = false;
+    let pendingError: Error | null = null;
+    let currentState: LoginScreenState = {
+      stage: 'creating',
+      loginUrl: null,
+      userCode: null,
+      requestId: null,
+      expiresAt: null,
+      remainingSeconds: null,
+      statusMessage: 'Worker isteği hazırlanıyor...',
+      error: null,
+      debugEnabled: debug,
+      logPath: getLoginDebugLogPath(),
+      attempts: 0,
+    };
+
+    const buildScreen = (state: LoginScreenState) =>
+      React.createElement(LoginScreen, {
+        state,
+        onOpen: () => {
+          if (state.loginUrl) {
+            openLoginUrl(state.loginUrl, options.print, debug).catch(() => undefined);
+          }
+        },
+        onCancel: () => {
+          cancelled = true;
+          if (pendingError) {
+            cleanup();
+            reject(pendingError);
             return;
           }
-
-          if (result.error) {
-            await recordLoginEvent('login-error', result.error.message, {
-              port,
-              phase: 'loopback-callback',
-            });
-            reject(result.error);
-            server.close();
+          if (finished) {
+            cleanup();
+            reject(new Error('Giriş kullanıcı tarafından iptal edildi.'));
           }
-        });
+        },
+      });
+
+    const ink = render(buildScreen(currentState));
+    const countdown = setInterval(() => {
+      if (!currentState.expiresAt) {
+        return;
+      }
+      currentState = {
+        ...currentState,
+        remainingSeconds: secondsUntil(currentState.expiresAt),
       };
+      ink.rerender(buildScreen(currentState));
+    }, 1000);
 
-      void handleRequest().catch(async (error) => {
-        const message = error instanceof Error ? error.message : 'Loopback isteği işlenemedi.';
-        await recordLoginEvent('login-error', message, {
-          phase: 'loopback-request',
+    function cleanup() {
+      clearInterval(countdown);
+      ink.unmount();
+    }
+
+    function updateState(patch: Partial<LoginScreenState>) {
+      currentState = {
+        ...currentState,
+        ...patch,
+      };
+      ink.rerender(buildScreen(currentState));
+    }
+
+    runLoginFlow(api, { ...options, renderUi: false }, {
+      onStateChange: updateState,
+      isCancelled: () => cancelled,
+    })
+      .then((profile) => {
+        finished = true;
+        updateState({
+          stage: 'success',
+          statusMessage: 'Oturum bağlandı. Ekran kapanıyor...',
         });
-        response.writeHead(500, {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Access-Control-Allow-Origin': '*',
+        setTimeout(() => {
+          cleanup();
+          resolve(profile);
+        }, 600);
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : 'CLI login tamamlanamadı.';
+        pendingError = error instanceof Error ? error : new Error(message);
+        finished = true;
+        updateState({
+          stage: cancelled ? 'cancelled' : 'error',
+          statusMessage: cancelled ? 'İstek kapatıldı.' : 'Düzeltmek için bağlantıyı yeniden açabilirsiniz.',
+          error: message,
         });
-        response.end(buildJsonResponse(500, { error: message }));
-        reject(error);
-        server.close();
-      });
-    });
 
-    const timeout = setTimeout(async () => {
-      const message = 'Tarayıcı callback zaman aşımına uğradı.';
-      await recordLoginEvent('login-error', message, {
-        phase: 'timeout',
-        timeoutMs: LOGIN_TIMEOUT_MS,
-      });
-      reject(new Error(message));
-      server.close();
-    }, LOGIN_TIMEOUT_MS);
-
-    server.listen(0, '127.0.0.1', async () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        clearTimeout(timeout);
-        const message = 'Loopback sunucusu başlatılamadı.';
-        await recordLoginEvent('login-error', message, {
-          phase: 'listen',
-        });
-        reject(new Error(message));
-        server.close();
-        return;
-      }
-
-      const loginUrl = new URL(`${DEFAULT_WEB_BASE_URL.replace(/\/$/, '')}/cli-auth`);
-      loginUrl.searchParams.set('port', String(address.port));
-      loginUrl.searchParams.set('state', state);
-      if (debug) {
-        loginUrl.searchParams.set('debug', '1');
-      }
-
-      await recordLoginEvent('login-start', 'CLI giriş akışı başlatıldı.', {
-        port: address.port,
-        debug,
-        noOpen,
-        logPath: getLoginDebugLogPath(),
-      });
-      await recordLoginEvent('login-url-generated', 'Giriş bağlantısı üretildi.', {
-        port: address.port,
-        loginUrl: loginUrl.toString(),
-        debug,
-      });
-
-      printLine(`Giriş bağlantısı: ${loginUrl.toString()}`, printer);
-      if (debug) {
-        printLine(`[login] Loopback portu hazır: ${address.port}`, printer);
-        printLine(`[login] Debug günlüğü: ${getLoginDebugLogPath()}`, printer);
-      }
-
-      if (noOpen) {
-        await recordLoginEvent('browser-open-attempt', 'Tarayıcı otomatik açma atlandı.', {
-          port: address.port,
-          skipped: true,
-          loginUrl: loginUrl.toString(),
-        });
-        if (debug) {
-          printLine('[login] Tarayıcı otomatik açma atlandı (--no-open).', printer);
+        if (cancelled) {
+          setTimeout(() => {
+            cleanup();
+            reject(pendingError as Error);
+          }, 300);
         }
-        return;
-      }
-
-      try {
-        await recordLoginEvent('browser-open-attempt', 'Tarayıcı açma denemesi gönderildi.', {
-          port: address.port,
-          loginUrl: loginUrl.toString(),
-          skipped: false,
-        });
-        await open(loginUrl.toString());
-        if (debug) {
-          printLine('[login] Varsayılan tarayıcı açıldı.', printer);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Tarayıcı açılamadı.';
-        await recordLoginEvent('browser-open-attempt', message, {
-          port: address.port,
-          loginUrl: loginUrl.toString(),
-          skipped: false,
-          ok: false,
-        });
-        printLine('Tarayıcı otomatik açılamadı. Yukarıdaki bağlantıyı elle açabilirsin.', printer);
-      }
-    });
-
-    server.on('close', () => clearTimeout(timeout));
-    server.on('error', async (error) => {
-      clearTimeout(timeout);
-      await recordLoginEvent('login-error', error.message, {
-        phase: 'server-error',
       });
-      reject(error);
-    });
   });
+}
 
-  const stored: StoredSession = {
-    session: payload.session as CliSession,
-    user: payload.user as CliUser,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeSession(stored);
-  await recordLoginEvent('session-stored', 'CLI oturumu yerel diske kaydedildi.', {
-    userId: stored.user.id,
-    email: stored.user.email || null,
-  });
+export async function loginWithBrowser(api: ApiClient, options: LoginOptions = {}): Promise<Profile> {
+  const debug = options.debug === true;
+
+  if (debug && !options.print) {
+    printLine(`[login] Debug günlüğü: ${getLoginDebugLogPath()}`, options.print);
+  }
 
   try {
-    const profile = await api.getProfile();
-    await recordLoginEvent('profile-fetch', 'Profil doğrulandı.', {
-      ok: true,
-      role: profile.role,
-      email: profile.email,
-    });
-    return profile;
-  } catch (error) {
-    await recordLoginEvent('profile-fetch', 'Profil doğrulama fallback ile tamamlandı.', {
-      ok: false,
-      fallback: true,
-      error: error instanceof Error ? error.message : 'Profil alınamadı.',
-    });
-    if (error instanceof ApiError || error instanceof Error) {
-      return {
-        id: payload.user?.id || 'unknown',
-        email: payload.user?.email || null,
-        fullName: null,
-        studentNumber: null,
-        role: 'student',
-      };
+    if ((options.renderUi ?? process.stdout.isTTY) && !options.print) {
+      return await loginWithInk(api, options);
     }
-    throw error;
+
+    return await runLoginFlow(api, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'CLI login tamamlanamadı.';
+    await recordLoginEvent('login-error', message, {
+      loginUrlBase: DEFAULT_WEB_BASE_URL,
+    });
+    throw error instanceof Error ? error : new Error(message);
   }
 }

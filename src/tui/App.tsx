@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { ApiClient, AuthRequiredError } from '../api/client.js';
+import { loginWithBrowser } from '../auth/login.js';
 import { executeCommand } from '../commands/execute.js';
 import { getCommandDefinition, parseCommand } from '../commands/registry.js';
 import { loadHomeSnapshot } from '../coordinator/home.js';
@@ -238,7 +239,17 @@ export function CliApp({ api, preferences }: AppProps) {
     setLoading(true);
     setError(null);
     try {
-      const result = await runCommand(api, id, args);
+      const result = id === 'login'
+        ? {
+            kind: 'profile' as const,
+            data: await loginWithBrowser(api, {
+              debug: args.debug === true,
+              noOpen: args['no-open'] === true,
+              renderUi: false,
+              print: (line) => setStatus(line),
+            }),
+          }
+        : await runCommand(api, id, args);
       if (id === 'whoami' && result.kind === 'profile') {
         setProfile(result.data);
       }
@@ -370,6 +381,12 @@ export function CliApp({ api, preferences }: AppProps) {
       if (loginSummary?.lastUrl) {
         connectionLines.push(`Son bağlantı: ${loginSummary.lastUrl}`);
       }
+      if (loginSummary?.lastCode) {
+        connectionLines.push(`Son cihaz kodu: ${loginSummary.lastCode}`);
+      }
+      if (loginSummary?.lastRequestId) {
+        connectionLines.push(`Son istek: ${loginSummary.lastRequestId}`);
+      }
       if (loginSummary?.logPath) {
         connectionLines.push(`Debug logu: ${loginSummary.logPath}`);
       }
@@ -443,7 +460,13 @@ export function CliApp({ api, preferences }: AppProps) {
           selected
         />
         <Box borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
-          <Text>{loading ? ui('Yükleniyor...') : currentResult ? renderCommandResult(currentCommand, currentResult) : ui('Henüz veri yok.')}</Text>
+          <Text>
+            {loading
+              ? ui('Yükleniyor...')
+              : currentResult && currentCommand !== 'home'
+                ? renderCommandResult(currentCommand, currentResult)
+                : ui('Henüz veri yok.')}
+          </Text>
         </Box>
       </Box>
     );
@@ -485,6 +508,8 @@ export function CliApp({ api, preferences }: AppProps) {
             lines={[
               loginSummary?.lastError ? `Son login hatası: ${loginSummary.lastError}` : 'Son login hatası kaydı yok.',
               loginSummary?.lastUrl ? `Son bağlantı: ${loginSummary.lastUrl}` : 'Son bağlantı kaydı yok.',
+              loginSummary?.lastCode ? `Son cihaz kodu: ${loginSummary.lastCode}` : 'Son cihaz kodu kaydı yok.',
+              loginSummary?.lastRequestId ? `Son istek: ${loginSummary.lastRequestId}` : 'Son istek kaydı yok.',
               loginSummary?.logPath ? `Debug logu: ${loginSummary.logPath}` : 'Debug logu henüz oluşmadı.',
             ]}
           />

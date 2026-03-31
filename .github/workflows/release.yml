@@ -58,14 +58,14 @@ jobs:
           files: "*.tgz"
           generate_release_notes: true
 
+      - name: Generate Homebrew formula
+        if: ${{ github.event_name == 'push' || github.event.inputs.update_formula == 'true' }}
+        run: node scripts/update_homebrew_formula.mjs
+
       - name: Publish to npm
         if: ${{ github.event_name == 'push' || github.event.inputs.publish_npm == 'true' }}
         run: |
           npm publish --access public
-
-      - name: Generate Homebrew formula
-        if: ${{ github.event_name == 'push' || github.event.inputs.update_formula == 'true' }}
-        run: node scripts/update_homebrew_formula.mjs
 
       - name: Commit formula to main
         if: ${{ github.event_name == 'push' }}

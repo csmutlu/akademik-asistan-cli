@@ -73,6 +73,23 @@ jobs:
         if: ${{ github.event_name == 'push' || github.event.inputs.update_formula == 'true' }}
         run: node scripts/update_homebrew_formula.mjs
 
+      - name: Commit formula to main
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          git fetch origin main
+          git switch main
+          git add Formula/akademik-asistan.rb
+
+          if git diff --cached --quiet; then
+            echo "Formula already up to date on main."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Homebrew formula for ${GITHUB_REF_NAME}"
+          git push origin main
+
       - name: Upload tarball artifact
         uses: actions/upload-artifact@v4
         with:

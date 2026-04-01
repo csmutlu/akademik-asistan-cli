@@ -161,6 +161,7 @@ async function runLoginFlow(
   printLine(`Cihaz kodu: ${request.userCode}`, printer);
   printLine(`Hazır bağlantı: ${loginUrl}`, printer);
   printLine(`Süre sonu: ${formatExpiry(request.expiresAt)}`, printer);
+  printLine('Webde zaten giriş açıksa Ayarlar > Terminal / CLI alanına bu kodu yapıştırabilirsiniz.', printer);
 
   if (debug) {
     printLine(`[login] İstek kimliği: ${request.requestId}`, printer);

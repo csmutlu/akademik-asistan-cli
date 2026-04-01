@@ -193,13 +193,28 @@ export function CliApp({ api, preferences }: AppProps) {
 
   const loadHome = async () => {
     setLoading(true);
-    setError(null);
     try {
       const currentProfile = await api.getProfile();
       setProfile(currentProfile);
       const snapshot = await loadHomeSnapshot(api);
-      setHome(snapshot);
-      setStatus(`Güncel • ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`);
+      setHome((current) => ({
+        ...current,
+        ...snapshot.data,
+      }));
+      const timeLabel = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+      const loadedCardCount = Object.keys(snapshot.data).length;
+      if (snapshot.errors.length > 0) {
+        if (loadedCardCount === 0) {
+          setError(snapshot.errors[0] || 'Veri yüklenemedi.');
+          setStatus('Sorun var');
+        } else {
+          setError(null);
+          setStatus(`Kısmi veri • ${timeLabel}`);
+        }
+      } else {
+        setError(null);
+        setStatus(`Güncel • ${timeLabel}`);
+      }
       await writePreferences({
         ...preferences,
         onboardingSeen: true,

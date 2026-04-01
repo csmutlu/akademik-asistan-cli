@@ -1,8 +1,8 @@
 class AkademikAsistan < Formula
   desc "Akademik Asistan command line interface"
   homepage "https://github.com/csmutlu/akademik-asistan-cli"
-  url "https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.13/aasistan-0.1.13.tgz"
-  sha256 "b5418ebe5b20650ff627d65957701906e6b7671a6892e34e133b23a2ad7c01ca"
+  url "https://github.com/csmutlu/akademik-asistan-cli/releases/download/cli-v0.1.14/aasistan-0.1.14.tgz"
+  sha256 "e63e9d1fbd86aae921d6a7d5cba1abd0b89ae847cedcf44bd2082ae09f078c56"
   license "MIT"
 
   depends_on "node"

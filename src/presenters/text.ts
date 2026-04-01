@@ -53,7 +53,7 @@ export function renderHelpText(): string {
     '- akademik-asistan login',
     '- akademik-asistan login --debug',
     '- akademik-asistan login --no-open',
-    '- Terminal cihaz kodu verir, web sayfası bu kodu kabul eder',
+    '- Terminal cihaz kodu verir, web sayfası akademikasistan.com/cli-auth üstünde bu kodu kabul eder',
     '- akademik-asistan whoami',
     '- akademik-asistan gundem',
     '- akademik-asistan watch',

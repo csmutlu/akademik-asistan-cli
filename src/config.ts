@@ -7,7 +7,7 @@ export const DEFAULT_API_BASE_URL =
 
 export const DEFAULT_WEB_BASE_URL =
   process.env.AKADEMIK_ASISTAN_WEB_URL?.trim() ||
-  'https://akademik-assistant-api.csmutlu10.workers.dev';
+  'https://akademikasistan.com';
 
 export const CONFIG_DIR = path.join(os.homedir(), '.config', 'akademik-asistan');
 export const SESSION_FILE = path.join(CONFIG_DIR, 'session.json');

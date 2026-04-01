@@ -1,4 +1,9 @@
-import { DEFAULT_API_BASE_URL, REFRESH_BUFFER_SECONDS } from '../config.js';
+import {
+  API_REQUEST_TIMEOUT_MS,
+  API_TRANSIENT_RETRY_LIMIT,
+  DEFAULT_API_BASE_URL,
+  REFRESH_BUFFER_SECONDS,
+} from '../config.js';
 import { clearSession, readSession, writeSession } from '../state/storage.js';
 import type {
   AgendaPayload,
@@ -65,6 +70,98 @@ type RequestExecution<T> = {
   response: Response;
   payload: JsonPayload<T>;
 };
+
+const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryDelayMs(attempt: number): number {
+  return 250 * attempt;
+}
+
+export function isTransientResponseStatus(status: number): boolean {
+  return RETRYABLE_STATUS_CODES.has(status);
+}
+
+export function getApiErrorMessage(status: number, fallback?: string): string {
+  if (fallback?.trim()) {
+    return fallback.trim();
+  }
+
+  switch (status) {
+    case 408:
+      return 'İstek zaman aşımına uğradı.';
+    case 425:
+    case 429:
+      return 'İstek geçici olarak sınırlanıyor; kısa süre sonra yeniden dene.';
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return 'Sunucu geçici olarak yanıt veremedi; kısa süre sonra yeniden dene.';
+    case 401:
+      return 'İstek yetkisiz.';
+    default:
+      return 'İstek başarısız.';
+  }
+}
+
+export function describeRequestFailure(error: unknown): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  if (!(error instanceof Error)) {
+    return 'Ağ isteği tamamlanamadı.';
+  }
+
+  const cause = error.cause as { code?: string } | undefined;
+  const code = cause?.code?.trim();
+
+  if (error.name === 'TimeoutError' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT') {
+    return 'Bağlantı zaman aşımına uğradı; sunucu veya ağ geçici olarak yavaş olabilir.';
+  }
+
+  if (code) {
+    return `Ağ isteği tamamlanamadı (${code}).`;
+  }
+
+  if (error.message === 'fetch failed') {
+    return 'Ağ isteği tamamlanamadı; geçici bağlantı sorunu olabilir.';
+  }
+
+  return error.message || 'Ağ isteği tamamlanamadı.';
+}
+
+export function shouldRetryRequest(
+  method: 'GET' | 'POST',
+  attempt: number,
+  maxAttempts: number,
+  options: {
+    status?: number;
+    error?: unknown;
+  } = {},
+): boolean {
+  if (method !== 'GET' || attempt >= maxAttempts) {
+    return false;
+  }
+
+  if (typeof options.status === 'number') {
+    return isTransientResponseStatus(options.status);
+  }
+
+  if (options.error instanceof Error) {
+    if (options.error.name === 'AbortError' || options.error.name === 'TimeoutError') {
+      return true;
+    }
+
+    return options.error.message === 'fetch failed' || Boolean((options.error.cause as { code?: string } | undefined)?.code);
+  }
+
+  return false;
+}
 
 export function recoverConcurrentSession(
   current: StoredSession,
@@ -468,17 +565,37 @@ export class ApiClient {
       headers: Record<string, string>;
     },
   ): Promise<RequestExecution<T>> {
-    const response = await fetch(`${this.baseUrl}${pathname}`, {
-      method: options.method,
-      headers: options.headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
+    const maxAttempts = 1 + API_TRANSIENT_RETRY_LIMIT;
 
-    const payload = (await response.json().catch(() => ({}))) as JsonPayload<T>;
-    return {
-      response,
-      payload,
-    };
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const response = await fetch(`${this.baseUrl}${pathname}`, {
+          method: options.method,
+          headers: options.headers,
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+        });
+
+        const payload = (await response.json().catch(() => ({}))) as JsonPayload<T>;
+        if (!response.ok && shouldRetryRequest(options.method, attempt, maxAttempts, { status: response.status })) {
+          await sleep(getRetryDelayMs(attempt));
+          continue;
+        }
+
+        return {
+          response,
+          payload,
+        };
+      } catch (error) {
+        if (!shouldRetryRequest(options.method, attempt, maxAttempts, { error })) {
+          throw new ApiError(describeRequestFailure(error), 0);
+        }
+
+        await sleep(getRetryDelayMs(attempt));
+      }
+    }
+
+    throw new ApiError('Ağ isteği tamamlanamadı.', 0);
   }
 
   private async request<T>(pathname: string, options: RequestOptions = {}): Promise<T> {
@@ -507,7 +624,7 @@ export class ApiClient {
       }
 
       if (response.status !== 401) {
-        throw new ApiError(payload.error || 'İstek başarısız.', response.status);
+        throw new ApiError(getApiErrorMessage(response.status, payload.error), response.status);
       }
 
       lastUnauthorizedMessage = payload.error || lastUnauthorizedMessage;
@@ -551,7 +668,7 @@ export class ApiClient {
       }
 
       if (response.status !== 401) {
-        throw new ApiError(payload.error || 'İstek başarısız.', response.status);
+        throw new ApiError(getApiErrorMessage(response.status, payload.error), response.status);
       }
 
       lastUnauthorizedMessage = payload.error || 'Cihaz oturumu artık geçerli değil.';

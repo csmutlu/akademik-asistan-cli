@@ -1,5 +1,6 @@
 import { getCommandDefinitions } from '../commands/registry.js';
 import { ui } from '../display.js';
+import { getCliVersion } from '../version.js';
 import type {
   AgendaPayload,
   AgendaSection,
@@ -34,6 +35,7 @@ function renderSection(section: AgendaSection): string {
 }
 
 export function renderHelpText(): string {
+  const version = getCliVersion();
   const definitions = getCommandDefinitions()
     .filter((definition) => definition.id !== 'help')
     .map((definition) => {
@@ -42,7 +44,7 @@ export function renderHelpText(): string {
     });
 
   return ui([
-    'Akademik Asistan CLI',
+    `Akademik Asistan CLI v${version}`,
     '',
     'Kurulum sonrası iki kullanım biçimi var:',
     '- Doğrudan komutlar: aasistan gundem, aasistan bugun, aasistan duyurular',
@@ -51,6 +53,7 @@ export function renderHelpText(): string {
     '',
     'Başlangıç:',
     '- akademik-asistan login',
+    '- akademik-asistan update',
     '- akademik-asistan login --debug',
     '- akademik-asistan login --no-open',
     '- Terminal cihaz kodu verir, web sayfası akademikasistan.com/cli-auth üstünde bu kodu kabul eder',
@@ -82,18 +85,20 @@ export function renderHelpText(): string {
 }
 
 export function renderOnboardingText(): string {
+  const version = getCliVersion();
   return ui([
-    'Akademik Asistan CLI',
+    `Akademik Asistan CLI v${version}`,
     '',
     'Bu sürüm read-only çalışır ve tüm kişiler aynı paketle login olabilir.',
     'CLI login artık cihaz kodu ile çalışan web onay sayfasını kullanır.',
     '',
     '1. akademik-asistan login',
-    '2. akademik-asistan login --no-open',
-    '3. akademik-asistan login --debug',
-    '4. akademik-asistan whoami',
-    '5. akademik-asistan gundem',
-    '6. akademik-asistan watch',
+    '2. akademik-asistan update',
+    '3. akademik-asistan login --no-open',
+    '4. akademik-asistan login --debug',
+    '5. akademik-asistan whoami',
+    '6. akademik-asistan gundem',
+    '7. akademik-asistan watch',
     '',
     'İnteraktif mod: aasistan',
     'Uzun komut: akademik-asistan',

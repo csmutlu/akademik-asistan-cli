@@ -5,6 +5,7 @@ import { executeCommand } from './commands/execute.js';
 import { parseCommand } from './commands/registry.js';
 import { maybeRunDream, registerCommandExecution, registerSessionStart } from './memory/dream.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from './presenters/text.js';
+import { runSelfUpdate } from './services/update.js';
 import { readPreferences } from './state/storage.js';
 import { CliApp } from './tui/App.js';
 
@@ -49,6 +50,18 @@ async function main() {
   const command = parsed.command;
   if (command.id === 'help') {
     process.stdout.write(`${renderHelpText()}\n`);
+    return;
+  }
+  if (command.id === 'update') {
+    try {
+      const message = await runSelfUpdate();
+      await registerCommandExecution('update', true, {});
+      process.stdout.write(`${message}\n`);
+    } catch (error) {
+      await registerCommandExecution('update', false, {}).catch(() => undefined);
+      process.stderr.write(`${error instanceof Error ? error.message : 'Güncelleme çalışmadı.'}\n`);
+      process.exitCode = 1;
+    }
     return;
   }
 

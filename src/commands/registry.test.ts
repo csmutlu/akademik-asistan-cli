@@ -30,6 +30,14 @@ test('parses login debug and no-open flags', () => {
   }
 });
 
+test('parses update command', () => {
+  const parsed = parseCommand(['update']);
+  assert.ok(parsed && parsed.ok);
+  if (parsed && parsed.ok) {
+    assert.equal(parsed.command.id, 'update');
+  }
+});
+
 test('returns suggestion for close matches', () => {
   const parsed = parseCommand(['gundm']);
   assert.ok(parsed && !parsed.ok);

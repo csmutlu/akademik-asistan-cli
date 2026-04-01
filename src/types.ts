@@ -1,5 +1,6 @@
 export type CommandId =
   | 'login'
+  | 'update'
   | 'logout'
   | 'whoami'
   | 'gundem'

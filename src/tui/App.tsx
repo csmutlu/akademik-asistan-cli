@@ -10,6 +10,7 @@ import { ui } from '../display.js';
 import { readLatestLoginDebugSummary, type LoginDebugSummary } from '../logging/login-debug.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
 import { writePreferences } from '../state/storage.js';
+import { getCliVersion } from '../version.js';
 import type {
   AgendaPayload,
   AnnouncementsPayload,
@@ -300,6 +301,11 @@ export function CliApp({ api, preferences }: AppProps) {
       setStatus('Sorun var');
       return;
     }
+    if (parsed.command.id === 'update') {
+      setError('`update` komutunu TUI dışında, doğrudan terminalde çalıştır.');
+      setStatus('Sorun var');
+      return;
+    }
     await openCommand(parsed.command.id, parsed.command.args);
   };
 
@@ -477,7 +483,7 @@ export function CliApp({ api, preferences }: AppProps) {
       <Box borderStyle="round" borderColor="cyan" paddingX={1} paddingY={0} flexDirection={narrow ? 'column' : 'row'} justifyContent="space-between">
         <Box flexDirection="column">
           <Text color="cyanBright">{ui('Akademik Asistan CLI')}</Text>
-          <Text color="gray">{ui('Sakin, hızlı ve kişisel akademik çalışma masası')}</Text>
+          <Text color="gray">{ui(`v${getCliVersion()} • Sakin, hızlı ve kişisel akademik çalışma masası`)}</Text>
         </Box>
         <Box flexDirection="column" marginTop={narrow ? 1 : 0}>
           <Text color="whiteBright">{ui(identityLabel)}</Text>

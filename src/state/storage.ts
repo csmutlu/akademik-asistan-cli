@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { BUDDY_HISTORY_FILE, CONFIG_DIR, LOGS_DIR, MEMORY_STATE_FILE, PREFERENCES_FILE, SESSION_FILE } from '../config.js';
-import type { BuddyMessage, MemoryState, StoredPreferences, StoredSession } from '../types.js';
+import { BUDDY_HISTORY_FILE, CONFIG_DIR, HOME_SNAPSHOT_FILE, LOGS_DIR, MEMORY_STATE_FILE, PREFERENCES_FILE, SESSION_FILE } from '../config.js';
+import type { BuddyMessage, HomePayload, MemoryState, StoredPreferences, StoredSession } from '../types.js';
 
 const DEFAULT_PREFERENCES: StoredPreferences = {
   onboardingSeen: false,
@@ -72,6 +72,18 @@ export async function readBuddyHistory(): Promise<BuddyMessage[]> {
 
 export async function writeBuddyHistory(history: BuddyMessage[]): Promise<void> {
   await writeSecureJson(BUDDY_HISTORY_FILE, history);
+}
+
+export async function readHomeSnapshot(): Promise<HomePayload | null> {
+  return readJsonFile<HomePayload>(HOME_SNAPSHOT_FILE);
+}
+
+export async function writeHomeSnapshot(snapshot: HomePayload): Promise<void> {
+  await writeSecureJson(HOME_SNAPSHOT_FILE, snapshot);
+}
+
+export async function clearHomeSnapshot(): Promise<void> {
+  await rm(HOME_SNAPSHOT_FILE, { force: true });
 }
 
 export async function readMemoryState(): Promise<MemoryState> {

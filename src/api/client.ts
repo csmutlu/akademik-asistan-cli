@@ -4,7 +4,7 @@ import {
   DEFAULT_API_BASE_URL,
   REFRESH_BUFFER_SECONDS,
 } from '../config.js';
-import { clearSession, readSession, writeSession } from '../state/storage.js';
+import { clearHomeSnapshot, clearSession, readSession, writeSession } from '../state/storage.js';
 import type {
   AgendaPayload,
   AnnouncementsPayload,
@@ -339,6 +339,7 @@ export class ApiClient {
         }).catch(() => undefined);
       }
     } finally {
+      await clearHomeSnapshot().catch(() => undefined);
       await clearSession();
     }
   }

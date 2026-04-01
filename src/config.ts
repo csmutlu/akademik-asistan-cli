@@ -14,6 +14,7 @@ export const SESSION_FILE = path.join(CONFIG_DIR, 'session.json');
 export const PREFERENCES_FILE = path.join(CONFIG_DIR, 'preferences.json');
 export const MEMORY_STATE_FILE = path.join(CONFIG_DIR, 'memory-state.json');
 export const MEMORY_FILE = path.join(CONFIG_DIR, 'MEMORY.md');
+export const HOME_SNAPSHOT_FILE = path.join(CONFIG_DIR, 'home-snapshot.json');
 export const BUDDY_HISTORY_FILE = path.join(CONFIG_DIR, 'buddy-history.json');
 export const DREAM_LOCK_FILE = path.join(CONFIG_DIR, '.dream.lock');
 export const LOGS_DIR = path.join(CONFIG_DIR, 'logs');

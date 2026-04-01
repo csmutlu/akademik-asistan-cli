@@ -7,7 +7,7 @@ import { loginWithBrowser } from '../auth/login.js';
 import { executeCommand } from '../commands/execute.js';
 import { getCommandDefinition, parseCommand } from '../commands/registry.js';
 import { HOME_REFRESH_INTERVAL_MS } from '../config.js';
-import { loadHomeSnapshot } from '../coordinator/home.js';
+import { loadHomeSnapshot, readCachedHomeSnapshot } from '../coordinator/home.js';
 import { ui } from '../display.js';
 import { readLatestLoginDebugSummary, type LoginDebugSummary } from '../logging/login-debug.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
@@ -266,6 +266,7 @@ export function CliApp({ api, preferences }: AppProps) {
   const [hasStoredSession, setHasStoredSession] = useState(false);
   const [errorSource, setErrorSource] = useState<ErrorSource>('command');
   const homeRequestRef = useRef<Promise<void> | null>(null);
+  const homeSnapshotRef = useRef<HomePayload | null>(null);
 
   const deferredBuddyHistory = useDeferredValue(buddyHistory);
   const cards = buildCardState(home);
@@ -307,7 +308,7 @@ export function CliApp({ api, preferences }: AppProps) {
     }
 
     const task = (async () => {
-      const existingHome = home;
+      const existingHome = homeSnapshotRef.current;
       const silentRefresh = isBackgroundRefresh(reason, Boolean(existingHome));
       if (!silentRefresh) {
         setLoading(true);
@@ -318,6 +319,7 @@ export function CliApp({ api, preferences }: AppProps) {
 
       try {
         const payload = await loadHomeSnapshot(api, forceRefresh);
+        homeSnapshotRef.current = payload;
         startTransition(() => {
           setHome(payload);
           setProfile(payload.profile);
@@ -343,6 +345,7 @@ export function CliApp({ api, preferences }: AppProps) {
         });
       } catch (err) {
         if (err instanceof AuthRequiredError) {
+          homeSnapshotRef.current = null;
           setProfile(null);
           setHome(null);
           setHasStoredSession(false);
@@ -359,7 +362,7 @@ export function CliApp({ api, preferences }: AppProps) {
         const nextHasStoredSession = await api.hasSession().catch(() => false);
         setHasStoredSession(nextHasStoredSession);
 
-        if (shouldKeepLastSnapshotOnError(Boolean(existingHome), nextHasStoredSession, err)) {
+        if (shouldKeepLastSnapshotOnError(Boolean(homeSnapshotRef.current), nextHasStoredSession, err)) {
           setError(null);
           setStatus(
             reason === 'auto'
@@ -473,6 +476,7 @@ export function CliApp({ api, preferences }: AppProps) {
         : await runCommand(api, id, args);
 
       if (id === 'logout') {
+        homeSnapshotRef.current = null;
         setProfile(null);
         setHome(null);
         setHasStoredSession(false);
@@ -553,10 +557,21 @@ export function CliApp({ api, preferences }: AppProps) {
 
   useEffect(() => {
     api.hasSession()
-      .then((value) => {
+      .then(async (value) => {
         setHasStoredSession(value);
         if (value) {
           pushActivity('Kayıtlı oturum bulundu');
+          const cachedSnapshot = await readCachedHomeSnapshot().catch(() => null);
+          if (cachedSnapshot) {
+            homeSnapshotRef.current = cachedSnapshot;
+            startTransition(() => {
+              setHome(cachedSnapshot);
+              setProfile(cachedSnapshot.profile);
+              syncPinnedDetail(cachedSnapshot, currentCommand);
+            });
+            setStatus('Son snapshot yüklendi');
+            pushActivity('Son snapshot yüklendi', formatTime(cachedSnapshot.syncedAt));
+          }
         }
       })
       .catch(() => undefined);

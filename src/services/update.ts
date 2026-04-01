@@ -13,9 +13,46 @@ type GitHubReleasePayload = {
   assets?: GitHubReleaseAsset[];
 };
 
+type SpawnConfig = {
+  command: string;
+  args: string[];
+  shell: boolean;
+};
+
+function quoteWindowsArg(value: string): string {
+  if (value.length === 0) {
+    return '""';
+  }
+
+  if (!/[\s"]/u.test(value)) {
+    return value;
+  }
+
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+export function buildSpawnConfig(command: string, args: string[], platform = process.platform): SpawnConfig {
+  if (platform === 'win32') {
+    const joined = [command, ...args].map(quoteWindowsArg).join(' ');
+    return {
+      command: joined,
+      args: [],
+      shell: true,
+    };
+  }
+
+  return {
+    command,
+    args,
+    shell: false,
+  };
+}
+
 function run(command: string, args: string[]): Promise<void> {
+  const spawnConfig = buildSpawnConfig(command, args);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(spawnConfig.command, spawnConfig.args, {
+      shell: spawnConfig.shell,
       stdio: 'inherit',
     });
 
@@ -34,8 +71,10 @@ function run(command: string, args: string[]): Promise<void> {
 }
 
 function canRun(command: string): Promise<boolean> {
+  const spawnConfig = buildSpawnConfig(command, ['--version']);
   return new Promise((resolve) => {
-    const child = spawn(command, ['--version'], {
+    const child = spawn(spawnConfig.command, spawnConfig.args, {
+      shell: spawnConfig.shell,
       stdio: 'ignore',
     });
 

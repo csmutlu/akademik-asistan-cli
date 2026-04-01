@@ -4,6 +4,7 @@ import {
   DEFAULT_API_BASE_URL,
   REFRESH_BUFFER_SECONDS,
 } from '../config.js';
+import { normalizeHomePayload } from '../home/normalize.js';
 import { clearHomeSnapshot, clearSession, readSession, writeSession } from '../state/storage.js';
 import type {
   AgendaPayload,
@@ -372,7 +373,8 @@ export class ApiClient {
 
   async getHome(forceRefresh = false): Promise<HomePayload> {
     const search = forceRefresh ? '?refresh=true' : '';
-    return this.request<HomePayload>(`/cli/home${search}`);
+    const payload = await this.request<HomePayload>(`/cli/home${search}`);
+    return normalizeHomePayload(payload);
   }
 
   async sendBuddyMessage(message: string, history: BuddyMessage[]): Promise<BuddyReplyPayload> {

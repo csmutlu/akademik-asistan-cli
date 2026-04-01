@@ -48,7 +48,8 @@ test('loadHomeSnapshot uses aggregated home endpoint', async () => {
   assert.equal(snapshot.profile.fullName, 'Test User');
   assert.ok(snapshot.cards.gundem);
   assert.ok(snapshot.cards.duyurular);
-  assert.equal(cachedSnapshot, snapshot);
+  assert.equal((cachedSnapshot as { cards?: { sinav?: { title?: string } } })?.cards?.sinav?.title, 'sinav');
+  assert.equal(snapshot.cards.sinav.title, 'sınav');
 });
 
 test('readCachedHomeSnapshot delegates to cache reader', async () => {

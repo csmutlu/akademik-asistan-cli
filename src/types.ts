@@ -3,6 +3,7 @@ export type CommandId =
   | 'update'
   | 'logout'
   | 'whoami'
+  | 'buddy'
   | 'gundem'
   | 'bugun'
   | 'yarin'
@@ -91,6 +92,18 @@ export type Profile = {
   role: string;
 };
 
+export type BuddyMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+};
+
+export type BuddyReplyPayload = {
+  response: string;
+  timestamp: string;
+};
+
 export type AgendaItem = {
   id: string;
   type: 'class' | 'assignment' | 'exam' | 'period';
@@ -160,6 +173,33 @@ export type CafeteriaPayload = {
   } | null;
 };
 
+export type HomePayload = {
+  now: string;
+  timezone: string;
+  syncedAt: string;
+  profile: Profile;
+  cards: {
+    gundem: AgendaPayload;
+    bugun: AgendaPayload;
+    odev: AgendaPayload;
+    sinav: AgendaPayload;
+    duyurular: AnnouncementsPayload;
+    yemekhane: CafeteriaPayload;
+  };
+  freshness: {
+    hardRefresh: boolean;
+    announcements: {
+      cached: boolean;
+      stale: boolean;
+      lastScraped: string | null;
+    };
+    cafeteria: {
+      fetchedAt: string | null;
+      sourceUrl: string | null;
+    };
+  };
+};
+
 export type TeacherDashboardPayload = {
   title: string;
   counts: {
@@ -198,6 +238,7 @@ export type CommandDefinition = {
 
 export type CommandResult =
   | { kind: 'profile'; data: Profile }
+  | { kind: 'buddy'; data: BuddyReplyPayload }
   | { kind: 'agenda'; data: AgendaPayload }
   | { kind: 'announcements'; data: AnnouncementsPayload }
   | { kind: 'cafeteria'; data: CafeteriaPayload }

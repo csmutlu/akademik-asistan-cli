@@ -5,6 +5,7 @@ const DEFINITIONS: CommandDefinition[] = [
   { id: 'update', path: ['update'], aliases: ['/update'], description: 'CLI sürümünü paket yöneticisiyle güncelle', requiresAuth: false, example: 'aasistan update' },
   { id: 'logout', path: ['logout'], aliases: ['/logout'], description: 'Kayıtlı oturumu kapat', requiresAuth: false, example: 'aasistan logout' },
   { id: 'whoami', path: ['whoami'], aliases: ['/whoami'], description: 'Aktif kullanıcıyı göster', example: 'aasistan whoami' },
+  { id: 'buddy', path: ['buddy'], aliases: ['/buddy'], description: 'Akademik buddy ile sohbet et', example: 'aasistan buddy bugun neye odaklanayim' },
   { id: 'gundem', path: ['gundem'], aliases: ['/gundem'], description: 'Kişisel gündemi getir', example: 'aasistan gundem' },
   { id: 'bugun', path: ['bugun'], aliases: ['/bugun'], description: 'Bugünün ders, ödev ve sınavları', example: 'aasistan bugun' },
   { id: 'yarin', path: ['yarin'], aliases: ['/yarin'], description: 'Yarının akademik kayıtları', example: 'aasistan yarin' },
@@ -73,6 +74,7 @@ export function parseCommand(inputTokens: string[]): ParseOutcome | null {
   let json = false;
   const args: Record<string, string | boolean> = {};
   const positional: string[] = [];
+  const rawPositional: string[] = [];
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -99,6 +101,7 @@ export function parseCommand(inputTokens: string[]): ParseOutcome | null {
       args[token.slice(2)] = true;
       continue;
     }
+    rawPositional.push(token.trim());
     positional.push(normalizeToken(token));
   }
 
@@ -106,15 +109,27 @@ export function parseCommand(inputTokens: string[]): ParseOutcome | null {
     return null;
   }
 
-  const normalized = positional.join(' ');
-  const definition = DEFINITIONS.find((candidate) => candidate.path.join(' ') === normalized);
+  const definition = [...DEFINITIONS]
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((candidate) => {
+      if (candidate.path.length > positional.length) {
+        return false;
+      }
+
+      return candidate.path.every((segment, index) => positional[index] === segment);
+    });
   if (!definition) {
     const suggestion = findSuggestion(positional);
     return {
       ok: false,
-      error: `Bilinmeyen komut: ${normalized}`,
+      error: `Bilinmeyen komut: ${positional.join(' ')}`,
       suggestion,
     };
+  }
+
+  const restRawTokens = rawPositional.slice(definition.path.length);
+  if (definition.id === 'buddy' && restRawTokens.length > 0) {
+    args.message = restRawTokens.join(' ').trim();
   }
 
   return {
@@ -123,7 +138,7 @@ export function parseCommand(inputTokens: string[]): ParseOutcome | null {
       id: definition.id,
       json,
       args,
-      rawTokens: positional,
+      rawTokens: rawPositional,
     },
   };
 }

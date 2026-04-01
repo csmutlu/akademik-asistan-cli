@@ -1,116 +1,130 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { ApiClient, AuthRequiredError } from '../api/client.js';
+import { createBuddyMessage, getBuddyWelcomeMessage, loadBuddyHistory, persistBuddyHistory, trimBuddyHistory } from '../buddy/history.js';
 import { loginWithBrowser } from '../auth/login.js';
 import { executeCommand } from '../commands/execute.js';
 import { getCommandDefinition, parseCommand } from '../commands/registry.js';
+import { HOME_REFRESH_INTERVAL_MS } from '../config.js';
 import { loadHomeSnapshot } from '../coordinator/home.js';
 import { ui } from '../display.js';
 import { readLatestLoginDebugSummary, type LoginDebugSummary } from '../logging/login-debug.js';
+import { readRecentMemoryEvents, type MemoryEvent } from '../memory/log.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
 import { writePreferences } from '../state/storage.js';
 import { getCliVersion } from '../version.js';
 import type {
-  AgendaPayload,
-  AnnouncementsPayload,
-  CafeteriaPayload,
+  BuddyMessage,
   CommandId,
   CommandResult,
+  HomePayload,
   ParsedCommand,
   Profile,
   StoredPreferences,
 } from '../types.js';
 
 type HomeCard = {
-  id: CommandId;
+  id: 'gundem' | 'bugun' | 'odev' | 'sinav' | 'duyurular' | 'yemekhane';
   title: string;
   badge: string;
   subtitle: string;
   lines: string[];
+  tone: 'cyan' | 'green' | 'yellow' | 'magenta' | 'blue';
 };
 
-type HomeState = {
-  gundem?: AgendaPayload;
-  bugun?: AgendaPayload;
-  odev?: AgendaPayload;
-  sinav?: AgendaPayload;
-  duyurular?: AnnouncementsPayload;
-  yemekhane?: CafeteriaPayload;
-};
+type ActiveRegion = 'grid' | 'detail' | 'rail';
+type RailMode = 'activity' | 'buddy';
 
 type AppProps = {
   api: ApiClient;
   preferences: StoredPreferences;
 };
 
-function agendaLines(payload?: AgendaPayload, emptyText = 'Yeni kayıt yok'): string[] {
-  if (!payload || payload.items.length === 0) {
+function agendaLines(payload: HomePayload['cards']['gundem'], emptyText: string): string[] {
+  if (payload.items.length === 0) {
     return [emptyText];
   }
 
-  return payload.items.slice(0, 2).map((item) => `${item.title} • ${item.badge}`);
+  return payload.items.slice(0, 3).map((item) => `${item.title} • ${item.badge}`);
 }
 
-function announcementsLines(payload?: AnnouncementsPayload): string[] {
-  if (!payload || payload.items.length === 0) {
-    return ['Yeni duyuru görünmüyor.'];
+function announcementLines(payload: HomePayload['cards']['duyurular']): string[] {
+  if (payload.items.length === 0) {
+    return ['Yeni duyuru gorunmuyor.'];
   }
 
-  return payload.items.slice(0, 2).map((item) => `${item.title} • ${item.date}`);
+  return payload.items.slice(0, 3).map((item) => `${item.title} • ${item.date}`);
 }
 
-function cafeteriaLines(payload?: CafeteriaPayload): string[] {
-  if (!payload?.menu?.items.length) {
-    return ['Bugün için menü bulunamadı.'];
+function cafeteriaLines(payload: HomePayload['cards']['yemekhane']): string[] {
+  if (!payload.menu?.items.length) {
+    return ['Bugun icin menu bulunamadi.'];
   }
 
   return payload.menu.items.slice(0, 3);
 }
 
-function buildCardState(home: HomeState): HomeCard[] {
+function buildCardState(home: HomePayload | null): HomeCard[] {
+  if (!home) {
+    return [
+      { id: 'gundem', title: 'Gundem', badge: '-', subtitle: 'Bekleniyor', lines: ['Veri baglaninca guncellenecek.'], tone: 'cyan' },
+      { id: 'bugun', title: 'Bugun', badge: '-', subtitle: 'Bekleniyor', lines: ['Ders ve teslimler yolda.'], tone: 'green' },
+      { id: 'odev', title: 'Odevler', badge: '-', subtitle: 'Bekleniyor', lines: ['Yaklasan teslimler baglaninca gorunur.'], tone: 'yellow' },
+      { id: 'sinav', title: 'Sinavlar', badge: '-', subtitle: 'Bekleniyor', lines: ['Yaklasan sinavlar baglaninca gorunur.'], tone: 'magenta' },
+      { id: 'duyurular', title: 'Duyurular', badge: '-', subtitle: 'Bekleniyor', lines: ['Son scrape sonrasi dolacak.'], tone: 'blue' },
+      { id: 'yemekhane', title: 'Yemekhane', badge: '-', subtitle: 'Bekleniyor', lines: ['Menu baglaninca yansir.'], tone: 'green' },
+    ];
+  }
+
   return [
     {
       id: 'gundem',
-      title: 'Gündem',
-      badge: home.gundem ? String(home.gundem.items.length) : '-',
-      subtitle: home.gundem?.summary.label || 'Yaklaşan kayıt yok',
-      lines: agendaLines(home.gundem, 'Yakın tarihte yeni kayıt görünmüyor.'),
+      title: 'Gundem',
+      badge: String(home.cards.gundem.items.length),
+      subtitle: home.cards.gundem.summary.label,
+      lines: agendaLines(home.cards.gundem, 'Yaklasan kayit yok.'),
+      tone: 'cyan',
     },
     {
       id: 'bugun',
-      title: 'Bugün',
-      badge: home.bugun ? String(home.bugun.items.length) : '-',
-      subtitle: home.bugun?.summary.label || 'Bugün sakin',
-      lines: agendaLines(home.bugun, 'Bugün planlanan ders veya teslim görünmüyor.'),
+      title: 'Bugun',
+      badge: String(home.cards.bugun.items.length),
+      subtitle: home.cards.bugun.summary.label,
+      lines: agendaLines(home.cards.bugun, 'Bugun sakin.'),
+      tone: 'green',
     },
     {
       id: 'odev',
-      title: 'Ödevler',
-      badge: home.odev ? String(home.odev.items.length) : '-',
-      subtitle: home.odev?.summary.label || 'Teslim görünmüyor',
-      lines: agendaLines(home.odev, 'Yaklaşan ödev görünmüyor.'),
+      title: 'Odevler',
+      badge: String(home.cards.odev.items.length),
+      subtitle: home.cards.odev.summary.label,
+      lines: agendaLines(home.cards.odev, 'Teslim gorunmuyor.'),
+      tone: 'yellow',
     },
     {
       id: 'sinav',
-      title: 'Sınavlar',
-      badge: home.sinav ? String(home.sinav.items.length) : '-',
-      subtitle: home.sinav?.summary.label || 'Sınav görünmüyor',
-      lines: agendaLines(home.sinav, 'Yaklaşan sınav görünmüyor.'),
+      title: 'Sinavlar',
+      badge: String(home.cards.sinav.items.length),
+      subtitle: home.cards.sinav.summary.label,
+      lines: agendaLines(home.cards.sinav, 'Sinav gorunmuyor.'),
+      tone: 'magenta',
     },
     {
       id: 'duyurular',
       title: 'Duyurular',
-      badge: home.duyurular ? String(home.duyurular.count) : '-',
-      subtitle: home.duyurular?.items[0]?.title || 'Yeni duyuru yok',
-      lines: announcementsLines(home.duyurular),
+      badge: String(home.cards.duyurular.count),
+      subtitle: home.cards.duyurular.cached ? 'Cache aktif' : 'Canli',
+      lines: announcementLines(home.cards.duyurular),
+      tone: 'blue',
     },
     {
       id: 'yemekhane',
       title: 'Yemekhane',
-      badge: home.yemekhane?.targetDate || '-',
-      subtitle: home.yemekhane?.menu?.items[0] || 'Menü hazır değil',
-      lines: cafeteriaLines(home.yemekhane),
+      badge: home.cards.yemekhane.targetDate,
+      subtitle: home.cards.yemekhane.menu?.items[0] || 'Menu hazir degil',
+      lines: cafeteriaLines(home.cards.yemekhane),
+      tone: 'green',
     },
   ];
 }
@@ -125,35 +139,69 @@ function chunkCards(cards: HomeCard[], columns: number): HomeCard[][] {
   );
 }
 
-type PanelProps = {
-  title: string;
-  subtitle?: string;
-  badge?: string;
-  lines?: string[];
-  selected?: boolean;
-  tone?: 'cyan' | 'green' | 'yellow' | 'magenta' | 'red' | 'blue';
-};
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) {
+    return '-';
+  }
 
-function Panel({ title, subtitle, badge, lines = [], selected = false, tone = 'cyan' }: PanelProps) {
-  const borderColor = selected ? tone : 'gray';
-  const titleColor = selected ? `${tone}Bright` : 'whiteBright';
+  return new Date(iso).toLocaleString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+  });
+}
 
-  return (
-    <Box borderStyle="round" borderColor={borderColor} paddingX={1} paddingY={0} marginBottom={1} flexDirection="column">
-      <Box justifyContent="space-between">
-        <Text color={titleColor}>{ui(title)}</Text>
-        {badge ? <Text color="gray">{ui(badge)}</Text> : null}
-      </Box>
-      {subtitle ? <Text color="gray">{ui(subtitle)}</Text> : null}
-      {lines.length > 0 ? (
-        <Box marginTop={1} flexDirection="column">
-          {lines.map((line, index) => (
-            <Text key={`${title}-${index}`}>{ui(line)}</Text>
-          ))}
-        </Box>
-      ) : null}
-    </Box>
-  );
+function formatActivityEvent(event: MemoryEvent): string {
+  const at = formatTime(event.ts);
+  if (event.type === 'session-start') {
+    return `${at} • Oturum basladi`;
+  }
+
+  const outcome = event.ok === false ? 'Hata' : 'Tamam';
+  const meta = event.meta?.mode ? ` • ${String(event.meta.mode)}` : '';
+  return `${at} • ${outcome} • ${event.command || 'komut'}${meta}`;
+}
+
+function buildDetailResult(home: HomePayload | null, commandId: HomeCard['id']): CommandResult | null {
+  if (!home) {
+    return null;
+  }
+
+  switch (commandId) {
+    case 'gundem':
+    case 'bugun':
+    case 'odev':
+    case 'sinav':
+      return { kind: 'agenda', data: home.cards[commandId] };
+    case 'duyurular':
+      return { kind: 'announcements', data: home.cards.duyurular };
+    case 'yemekhane':
+      return { kind: 'cafeteria', data: home.cards.yemekhane };
+    default:
+      return null;
+  }
+}
+
+function buildFreshnessLines(home: HomePayload | null, cardId: HomeCard['id']): string[] {
+  if (!home) {
+    return ['Synced: -'];
+  }
+
+  const base = [`Synced: ${formatTime(home.syncedAt)}`];
+
+  if (cardId === 'duyurular') {
+    base.push(`Cache: ${home.freshness.announcements.cached ? 'evet' : 'hayir'}`);
+    base.push(`Stale: ${home.freshness.announcements.stale ? 'evet' : 'hayir'}`);
+    base.push(`Son scrape: ${formatTime(home.freshness.announcements.lastScraped)}`);
+  }
+
+  if (cardId === 'yemekhane') {
+    base.push(`Fetched: ${formatTime(home.freshness.cafeteria.fetchedAt)}`);
+    base.push(`Kaynak: ${home.freshness.cafeteria.sourceUrl || '-'}`);
+  }
+
+  return base;
 }
 
 async function runCommand(api: ApiClient, id: CommandId, args: Record<string, string | boolean> = {}): Promise<CommandResult> {
@@ -166,55 +214,110 @@ async function runCommand(api: ApiClient, id: CommandId, args: Record<string, st
   return executeCommand(parsed, { api });
 }
 
+type PanelProps = {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  lines?: string[];
+  selected?: boolean;
+  borderColor?: 'cyan' | 'green' | 'yellow' | 'magenta' | 'red' | 'blue' | 'gray';
+  titleColor?: 'cyanBright' | 'greenBright' | 'yellowBright' | 'magentaBright' | 'whiteBright' | 'blueBright' | 'redBright';
+};
+
+function Panel({
+  title,
+  subtitle,
+  badge,
+  lines = [],
+  selected = false,
+  borderColor = 'gray',
+  titleColor = 'whiteBright',
+}: PanelProps) {
+  return (
+    <Box borderStyle="round" borderColor={selected ? borderColor : 'gray'} paddingX={1} paddingY={0} marginBottom={1} flexDirection="column">
+      <Box justifyContent="space-between">
+        <Text color={selected ? titleColor : 'whiteBright'}>{ui(title)}</Text>
+        {badge ? <Text color="gray">{ui(badge)}</Text> : null}
+      </Box>
+      {subtitle ? <Text color="gray">{ui(subtitle)}</Text> : null}
+      {lines.length > 0 ? (
+        <Box flexDirection="column" marginTop={1}>
+          {lines.map((line, index) => (
+            <Text key={`${title}-${index}`}>{ui(line)}</Text>
+          ))}
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
 export function CliApp({ api, preferences }: AppProps) {
   const { exit } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [home, setHome] = useState<HomePayload | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [home, setHome] = useState<HomeState>({});
   const [currentCommand, setCurrentCommand] = useState<CommandId | 'home'>('home');
   const [currentResult, setCurrentResult] = useState<CommandResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [buddyLoading, setBuddyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [commandMode, setCommandMode] = useState(false);
   const [commandInput, setCommandInput] = useState('');
   const [showHelp, setShowHelp] = useState(false);
-  const [status, setStatus] = useState<string>('Hazır');
+  const [status, setStatus] = useState('Hazir');
   const [loginSummary, setLoginSummary] = useState<LoginDebugSummary | null>(null);
+  const [activeRegion, setActiveRegion] = useState<ActiveRegion>('grid');
+  const [railMode, setRailMode] = useState<RailMode>('activity');
+  const [buddyInput, setBuddyInput] = useState('');
+  const [buddyHistory, setBuddyHistory] = useState<BuddyMessage[]>([]);
+  const [activityLines, setActivityLines] = useState<string[]>([]);
 
-  const cards = useMemo(() => buildCardState(home), [home]);
+  const deferredBuddyHistory = useDeferredValue(buddyHistory);
+  const cards = buildCardState(home);
   const selectedCard = cards[selectedIndex] || cards[0];
-  const columns = process.stdout.columns || 100;
-  const narrow = columns < 104;
+  const columns = process.stdout.columns || 120;
+  const narrow = columns < 120;
   const cardColumns = chunkCards(cards, narrow ? 1 : 2);
+  const displayedBuddyHistory = deferredBuddyHistory.length > 0 ? deferredBuddyHistory : [getBuddyWelcomeMessage()];
+  const detailCommand = currentCommand === 'home' ? selectedCard?.id : currentCommand;
+  const detailResult = currentCommand === 'home' && selectedCard
+    ? buildDetailResult(home, selectedCard.id)
+    : currentResult;
+  const detailTitle = currentCommand === 'home'
+    ? selectedCard?.title || 'Detay'
+    : getCommandDefinition(currentCommand)?.description || currentCommand;
 
   const refreshLoginSummary = async () => {
     setLoginSummary(await readLatestLoginDebugSummary());
   };
 
-  const loadHome = async () => {
+  const refreshActivity = async () => {
+    const events = await readRecentMemoryEvents(2);
+    setActivityLines(events.slice(-8).reverse().map(formatActivityEvent));
+  };
+
+  const syncPinnedDetail = (nextHome: HomePayload, nextCommand: CommandId | 'home') => {
+    if (nextCommand === 'home') {
+      setCurrentResult(null);
+      return;
+    }
+
+    if (nextCommand === 'gundem' || nextCommand === 'bugun' || nextCommand === 'odev' || nextCommand === 'sinav' || nextCommand === 'duyurular' || nextCommand === 'yemekhane') {
+      setCurrentResult(buildDetailResult(nextHome, nextCommand));
+    }
+  };
+
+  const loadHome = async (forceRefresh = false) => {
     setLoading(true);
     try {
-      const currentProfile = await api.getProfile();
-      setProfile(currentProfile);
-      const snapshot = await loadHomeSnapshot(api);
-      setHome((current) => ({
-        ...current,
-        ...snapshot.data,
-      }));
-      const timeLabel = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-      const loadedCardCount = Object.keys(snapshot.data).length;
-      if (snapshot.errors.length > 0) {
-        if (loadedCardCount === 0) {
-          setError(snapshot.errors[0] || 'Veri yüklenemedi.');
-          setStatus('Sorun var');
-        } else {
-          setError(null);
-          setStatus(`Kısmi veri • ${timeLabel}`);
-        }
-      } else {
-        setError(null);
-        setStatus(`Güncel • ${timeLabel}`);
-      }
+      const payload = await loadHomeSnapshot(api, forceRefresh);
+      startTransition(() => {
+        setHome(payload);
+        setProfile(payload.profile);
+        syncPinnedDetail(payload, currentCommand);
+      });
+      setError(null);
+      setStatus(forceRefresh ? 'Sert yenileme tamamlandi' : 'Dashboard guncel');
       await writePreferences({
         ...preferences,
         onboardingSeen: true,
@@ -223,35 +326,82 @@ export function CliApp({ api, preferences }: AppProps) {
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         setProfile(null);
-        setHome({});
+        setHome(null);
+        setCurrentCommand('home');
+        setCurrentResult(null);
+        setStatus('Giris gerekli');
         setError(null);
-        setStatus('Giriş gerekli');
         await refreshLoginSummary();
       } else {
-        setError(err instanceof Error ? err.message : 'Veri yüklenemedi.');
+        setError(err instanceof Error ? err.message : 'Veri yuklenemedi.');
         setStatus('Sorun var');
       }
     } finally {
       setLoading(false);
+      await refreshActivity().catch(() => undefined);
     }
   };
 
-  useEffect(() => {
-    loadHome().catch(() => undefined);
-    refreshLoginSummary().catch(() => undefined);
-  }, []);
+  const submitBuddy = async (message: string) => {
+    const trimmed = message.trim();
+    if (!trimmed || buddyLoading) {
+      return;
+    }
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (currentCommand === 'home') {
-        loadHome().catch(() => undefined);
-      }
-    }, 60_000);
+    const userMessage = createBuddyMessage('user', trimmed);
+    const optimisticHistory = trimBuddyHistory([...buddyHistory, userMessage]);
+    startTransition(() => setBuddyHistory(optimisticHistory));
+    await persistBuddyHistory(optimisticHistory).catch(() => undefined);
+    setBuddyInput('');
+    setBuddyLoading(true);
+    setRailMode('buddy');
+    setActiveRegion('rail');
+    setStatus('Buddy yaziyor');
 
-    return () => clearInterval(timer);
-  }, [currentCommand]);
+    try {
+      const reply = await api.sendBuddyMessage(trimmed, optimisticHistory);
+      const assistantMessage = createBuddyMessage('assistant', reply.response, reply.timestamp);
+      const nextHistory = trimBuddyHistory([...optimisticHistory, assistantMessage]);
+      startTransition(() => setBuddyHistory(nextHistory));
+      await persistBuddyHistory(nextHistory).catch(() => undefined);
+      setError(null);
+      setStatus('Buddy hazir');
+    } catch (err) {
+      const assistantMessage = createBuddyMessage(
+        'assistant',
+        err instanceof Error ? err.message : 'Buddy gecici olarak yanit veremedi.',
+      );
+      const nextHistory = trimBuddyHistory([...optimisticHistory, assistantMessage]);
+      startTransition(() => setBuddyHistory(nextHistory));
+      await persistBuddyHistory(nextHistory).catch(() => undefined);
+      setError(err instanceof Error ? err.message : 'Buddy hatasi');
+      setStatus('Buddy sorunu');
+    } finally {
+      setBuddyLoading(false);
+      await refreshActivity().catch(() => undefined);
+    }
+  };
 
   const openCommand = async (id: CommandId, args: Record<string, string | boolean> = {}) => {
+    if (id === 'buddy') {
+      const message = typeof args.message === 'string' ? args.message : '';
+      if (message.trim()) {
+        await submitBuddy(message);
+      } else {
+        setRailMode((current) => (current === 'buddy' ? 'activity' : 'buddy'));
+        setActiveRegion('rail');
+      }
+      return;
+    }
+
+    if (id === 'gundem' || id === 'bugun' || id === 'odev' || id === 'sinav' || id === 'duyurular' || id === 'yemekhane') {
+      setCurrentCommand(id);
+      setCurrentResult(buildDetailResult(home, id));
+      setActiveRegion('detail');
+      setStatus(`${id} acildi`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -266,27 +416,39 @@ export function CliApp({ api, preferences }: AppProps) {
             }),
           }
         : await runCommand(api, id, args);
-      if (id === 'whoami' && result.kind === 'profile') {
-        setProfile(result.data);
-      }
-      if (id === 'login') {
-        await refreshLoginSummary();
-        await loadHome();
-      }
+
       if (id === 'logout') {
         setProfile(null);
-        setHome({});
+        setHome(null);
+        setCurrentCommand('home');
+        setCurrentResult(null);
+      } else if (id === 'whoami' && result.kind === 'profile') {
+        setProfile(result.data);
+        setCurrentCommand(id);
+        setCurrentResult(result);
+      } else {
+        setCurrentCommand(id);
+        setCurrentResult(result);
+      }
+
+      if (id === 'login') {
+        await refreshLoginSummary();
+        await loadHome(true);
+      }
+
+      if (id === 'logout') {
         await refreshLoginSummary();
       }
-      setCurrentCommand(id);
-      setCurrentResult(result);
-      setStatus(id === 'login' ? 'Bağlandı' : 'Hazır');
+
+      setStatus(id === 'login' ? 'Baglandi' : 'Hazir');
+      setActiveRegion('detail');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Komut çalışmadı.');
+      setError(err instanceof Error ? err.message : 'Komut calismadi.');
       setStatus('Sorun var');
       await refreshLoginSummary();
     } finally {
       setLoading(false);
+      await refreshActivity().catch(() => undefined);
     }
   };
 
@@ -298,7 +460,7 @@ export function CliApp({ api, preferences }: AppProps) {
       return;
     }
     if (!parsed.ok) {
-      setError(parsed.suggestion ? `${parsed.error}. Sanırım: ${parsed.suggestion}` : parsed.error);
+      setError(parsed.suggestion ? `${parsed.error}. Sanirim: ${parsed.suggestion}` : parsed.error);
       setStatus('Sorun var');
       setCommandMode(false);
       setCommandInput('');
@@ -312,23 +474,59 @@ export function CliApp({ api, preferences }: AppProps) {
       return;
     }
     if (parsed.command.id === 'watch') {
-      setError('`watch` komutunu TUI dışında, doğrudan terminalde çalıştır.');
+      setError('`watch` komutunu TUI disinda, dogrudan terminalde calistir.');
       setStatus('Sorun var');
       return;
     }
     if (parsed.command.id === 'update') {
-      setError('`update` komutunu TUI dışında, doğrudan terminalde çalıştır.');
+      setError('`update` komutunu TUI disinda, dogrudan terminalde calistir.');
       setStatus('Sorun var');
       return;
     }
     await openCommand(parsed.command.id, parsed.command.args);
   };
 
+  useEffect(() => {
+    loadBuddyHistory()
+      .then((history) => setBuddyHistory(history))
+      .catch(() => undefined);
+    loadHome().catch(() => undefined);
+    refreshLoginSummary().catch(() => undefined);
+    refreshActivity().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (profile) {
+        loadHome(false).catch(() => undefined);
+      }
+    }, HOME_REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [profile, currentCommand]);
+
+  const cycleRegion = () => {
+    setActiveRegion((current) => {
+      if (current === 'grid') return 'detail';
+      if (current === 'detail') return 'rail';
+      return 'grid';
+    });
+  };
+
+  const isBuddyComposerActive = railMode === 'buddy' && activeRegion === 'rail' && !commandMode && !showHelp;
+
   useInput((input, key) => {
     if (commandMode) {
       if (key.escape) {
         setCommandMode(false);
         setCommandInput('');
+      }
+      return;
+    }
+
+    if (isBuddyComposerActive) {
+      if (key.escape) {
+        setActiveRegion('detail');
       }
       return;
     }
@@ -356,17 +554,33 @@ export function CliApp({ api, preferences }: AppProps) {
       return;
     }
 
+    if (input === 'b') {
+      setRailMode((current) => (current === 'buddy' ? 'activity' : 'buddy'));
+      setActiveRegion('rail');
+      return;
+    }
+
+    if (key.tab) {
+      cycleRegion();
+      return;
+    }
+
     if (input === 'r') {
-      if (currentCommand === 'home') {
-        loadHome().catch(() => undefined);
-      } else {
-        openCommand(currentCommand).catch(() => undefined);
+      if (profile) {
+        loadHome(true).catch(() => undefined);
       }
       return;
     }
 
-    if (currentCommand === 'home') {
-      if (input === 'j' || key.downArrow || key.tab) {
+    if (input === 'h' || key.leftArrow) {
+      setCurrentCommand('home');
+      setCurrentResult(null);
+      setActiveRegion('grid');
+      return;
+    }
+
+    if (activeRegion === 'grid') {
+      if (input === 'j' || key.downArrow) {
         setSelectedIndex((current) => (current + 1) % cards.length);
         return;
       }
@@ -380,77 +594,59 @@ export function CliApp({ api, preferences }: AppProps) {
       return;
     }
 
-    if (input === 'h' || key.leftArrow) {
-      setCurrentCommand('home');
-      setCurrentResult(null);
+    if (activeRegion === 'detail' && key.return && selectedCard) {
+      openCommand(selectedCard.id).catch(() => undefined);
     }
   });
 
   const identityLabel = profile
-    ? `${profile.fullName || profile.email || 'Kullanıcı'} • ${profile.role}`
-    : 'Bağlanmamış oturum';
-  const showLoginDiagnostics = !profile || currentCommand === 'login' || status === 'Giriş gerekli';
-  const errorPanelLines = showLoginDiagnostics
-    ? [
-        loginSummary?.lastError ? `Son login hatası: ${loginSummary.lastError}` : 'Son login hatası kaydı yok.',
-        loginSummary?.lastUrl ? `Son bağlantı: ${loginSummary.lastUrl}` : 'Son bağlantı kaydı yok.',
-        loginSummary?.lastCode ? `Son cihaz kodu: ${loginSummary.lastCode}` : 'Son cihaz kodu kaydı yok.',
-        loginSummary?.lastRequestId ? `Son istek: ${loginSummary.lastRequestId}` : 'Son istek kaydı yok.',
-        loginSummary?.logPath ? `Debug logu: ${loginSummary.logPath}` : 'Debug logu henüz oluşmadı.',
-      ]
-    : [];
+    ? `${profile.fullName || profile.email || 'Kullanici'} • ${profile.role}`
+    : 'Baglanmamis oturum';
+  const syncLine = home
+    ? `Synced ${formatTime(home.syncedAt)} • Duyuru cache ${home.freshness.announcements.cached ? 'on' : 'off'} • Stale ${home.freshness.announcements.stale ? 'on' : 'off'}`
+    : 'Home snapshot bekleniyor';
+  const commandLine = currentCommand === 'home'
+    ? `Detay: ${selectedCard?.title || '-'}`
+    : `Pimli detay: ${detailTitle}`;
 
-  const renderHomeScreen = () => {
-    if (!profile) {
-      const connectionLines = [
-        'aasistan login',
-        'aasistan login --no-open',
-        'aasistan login --debug',
-        'aasistan whoami',
-      ];
+  const renderAnonymousHome = () => {
+    const connectionLines = [
+      'aasistan login',
+      'aasistan login --no-open',
+      'aasistan login --debug',
+      'aasistan whoami',
+    ];
 
-      if (loginSummary?.lastUrl) {
-        connectionLines.push(`Son bağlantı: ${loginSummary.lastUrl}`);
-      }
-      if (loginSummary?.lastCode) {
-        connectionLines.push(`Son cihaz kodu: ${loginSummary.lastCode}`);
-      }
-      if (loginSummary?.lastRequestId) {
-        connectionLines.push(`Son istek: ${loginSummary.lastRequestId}`);
-      }
-      if (loginSummary?.logPath) {
-        connectionLines.push(`Debug logu: ${loginSummary.logPath}`);
-      }
-
-      const learnLines = renderOnboardingText().split('\n').filter(Boolean);
-
-      return (
-        <Box marginTop={1} flexDirection={narrow ? 'column' : 'row'}>
-          <Box flexDirection="column" width={narrow ? undefined : '50%'} marginRight={narrow ? 0 : 1}>
-            <Panel
-              title="Bağlan"
-              subtitle="Tarayıcı login bağlantısı her zaman terminale yazdırılır."
-              badge="login"
-              tone="green"
-              lines={connectionLines}
-              selected
-            />
-          </Box>
-          <Box flexDirection="column" width={narrow ? undefined : '50%'}>
-            <Panel
-              title="Nasıl kullanılır"
-              subtitle="İlk akış ve slash komutları"
-              badge="yardım"
-              tone="blue"
-              lines={learnLines}
-            />
-          </Box>
-        </Box>
-      );
+    if (loginSummary?.lastUrl) {
+      connectionLines.push(`Son baglanti: ${loginSummary.lastUrl}`);
+    }
+    if (loginSummary?.lastCode) {
+      connectionLines.push(`Son cihaz kodu: ${loginSummary.lastCode}`);
+    }
+    if (loginSummary?.logPath) {
+      connectionLines.push(`Debug logu: ${loginSummary.logPath}`);
     }
 
     return (
-      <Box marginTop={1} flexDirection={narrow ? 'column' : 'row'}>
+      <Panel
+        title="Baglan"
+        subtitle="Tarayici login baglantisi terminale yazdirilir."
+        badge="login"
+        borderColor="green"
+        titleColor="greenBright"
+        selected={activeRegion === 'grid'}
+        lines={connectionLines}
+      />
+    );
+  };
+
+  const renderGrid = () => {
+    if (!profile) {
+      return renderAnonymousHome();
+    }
+
+    return (
+      <Box flexDirection={narrow ? 'column' : 'row'}>
         {cardColumns.map((columnCards, columnIndex) => (
           <Box
             key={`column-${columnIndex}`}
@@ -462,11 +658,22 @@ export function CliApp({ api, preferences }: AppProps) {
               <Panel
                 key={card.id}
                 title={card.title}
-                badge={card.badge}
                 subtitle={card.subtitle}
+                badge={card.badge}
                 lines={card.lines}
-                selected={selectedCard?.id === card.id}
-                tone={selectedCard?.id === card.id ? 'cyan' : 'blue'}
+                selected={activeRegion === 'grid' && selectedCard?.id === card.id}
+                borderColor={card.tone}
+                titleColor={
+                  card.tone === 'cyan'
+                    ? 'cyanBright'
+                    : card.tone === 'green'
+                      ? 'greenBright'
+                      : card.tone === 'yellow'
+                        ? 'yellowBright'
+                        : card.tone === 'magenta'
+                          ? 'magentaBright'
+                          : 'blueBright'
+                }
               />
             ))}
           </Box>
@@ -475,31 +682,60 @@ export function CliApp({ api, preferences }: AppProps) {
     );
   };
 
-  const renderResultScreen = () => {
-    const title = currentCommand === 'home'
-      ? 'Ana ekran'
-      : getCommandDefinition(currentCommand)?.description || currentCommand;
+  const renderDetailBody = () => {
+    if (!profile) {
+      return (
+        <Text>{ui(renderOnboardingText())}</Text>
+      );
+    }
 
-    return (
-      <Box marginTop={1} flexDirection="column">
-        <Panel
-          title={title}
-          subtitle={currentCommand === 'home' ? 'Genel görünüm' : 'Ayrıntılı çıktı'}
-          badge={currentCommand === 'home' ? 'home' : currentCommand}
-          tone="magenta"
-          lines={[]}
-          selected
-        />
-        <Box borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
-          <Text>
-            {loading
-              ? ui('Yükleniyor...')
-              : currentResult && currentCommand !== 'home'
-                ? renderCommandResult(currentCommand, currentResult)
-                : ui('Henüz veri yok.')}
-          </Text>
+    if (loading && !detailResult) {
+      return <Text color="yellow">{ui('Detay yukleniyor...')}</Text>;
+    }
+
+    if (!detailResult || !detailCommand || detailCommand === 'buddy') {
+      return <Text>{ui('Secili kartin detaylari burada gorunur.')}</Text>;
+    }
+
+    return <Text>{renderCommandResult(detailCommand, detailResult)}</Text>;
+  };
+
+  const renderRail = () => {
+    if (railMode === 'buddy') {
+      return (
+        <Box flexDirection="column">
+          <Panel
+            title="Buddy"
+            subtitle={buddyLoading ? 'Yanit uretiliyor' : 'Akademik odak asistani'}
+            badge={buddyLoading ? '...' : `${displayedBuddyHistory.length}`}
+            selected={activeRegion === 'rail'}
+            borderColor="yellow"
+            titleColor="yellowBright"
+            lines={displayedBuddyHistory.slice(-8).map((message) => `${message.role === 'assistant' ? 'Buddy' : 'Sen'}: ${message.content}`)}
+          />
+          {activeRegion === 'rail' ? (
+            <Box borderStyle="round" borderColor="yellow" paddingX={1}>
+              <Text color="yellow">{ui('Buddy > ')}</Text>
+              <TextInput value={buddyInput} onChange={setBuddyInput} onSubmit={submitBuddy} />
+            </Box>
+          ) : (
+            <Text color="gray">{ui('b ile buddy ac, Tab ile odagi buraya getir, Enter ile gonder.')}</Text>
+          )}
         </Box>
-      </Box>
+      );
+    }
+
+    const lines = activityLines.length > 0 ? activityLines : ['Henuz etkinlik yok.'];
+    return (
+      <Panel
+        title="Activity"
+        subtitle="Son oturum ve komut hareketleri"
+        badge={`${lines.length}`}
+        selected={activeRegion === 'rail'}
+        borderColor="blue"
+        titleColor="blueBright"
+        lines={lines}
+      />
     );
   };
 
@@ -507,12 +743,14 @@ export function CliApp({ api, preferences }: AppProps) {
     <Box flexDirection="column" padding={1}>
       <Box borderStyle="round" borderColor="cyan" paddingX={1} paddingY={0} flexDirection={narrow ? 'column' : 'row'} justifyContent="space-between">
         <Box flexDirection="column">
-          <Text color="cyanBright">{ui('Akademik Asistan CLI')}</Text>
-          <Text color="gray">{ui(`v${getCliVersion()} • Sakin, hızlı ve kişisel akademik çalışma masası`)}</Text>
+          <Text color="cyanBright">{ui('Akademik Asistan CLI v2')}</Text>
+          <Text color="gray">{ui(`${identityLabel}`)}</Text>
+          <Text color="gray">{ui(syncLine)}</Text>
+          <Text color="gray">{ui(commandLine)}</Text>
         </Box>
         <Box flexDirection="column" marginTop={narrow ? 1 : 0}>
-          <Text color="whiteBright">{ui(identityLabel)}</Text>
           <Text color={error ? 'redBright' : profile ? 'greenBright' : 'yellow'}>{ui(`Durum: ${status}`)}</Text>
+          <Text color="gray">{ui(`Region: ${activeRegion} • Rail: ${railMode}`)}</Text>
         </Box>
       </Box>
 
@@ -520,23 +758,64 @@ export function CliApp({ api, preferences }: AppProps) {
         <Box marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1} paddingY={0}>
           <Text>{renderHelpText()}</Text>
         </Box>
-      ) : currentCommand === 'home' ? renderHomeScreen() : renderResultScreen()}
+      ) : (
+        <Box marginTop={1} flexDirection={narrow ? 'column' : 'row'}>
+          <Box width={narrow ? undefined : '42%'} marginRight={narrow ? 0 : 1} flexDirection="column">
+            <Panel
+              title="Dashboard"
+              subtitle="Kartlar ve kisa ozetler"
+              badge={selectedCard?.title || '-'}
+              selected={activeRegion === 'grid'}
+              borderColor="cyan"
+              titleColor="cyanBright"
+              lines={[]}
+            />
+            {renderGrid()}
+          </Box>
 
-      {loading && currentCommand === 'home' ? (
+          <Box width={narrow ? undefined : '33%'} marginRight={narrow ? 0 : 1} flexDirection="column">
+            <Panel
+              title={detailTitle}
+              subtitle={detailCommand && detailCommand !== 'buddy' && detailCommand !== 'teacher-dashboard' && detailCommand !== 'whoami'
+                ? buildFreshnessLines(home, detailCommand as HomeCard['id']).join(' • ')
+                : `Synced: ${formatTime(home?.syncedAt)}`}
+              badge={currentCommand === 'home' ? 'drawer' : currentCommand}
+              selected={activeRegion === 'detail'}
+              borderColor="magenta"
+              titleColor="magentaBright"
+              lines={[]}
+            />
+            <Box borderStyle="round" borderColor={activeRegion === 'detail' ? 'magenta' : 'gray'} paddingX={1} paddingY={0}>
+              {renderDetailBody()}
+            </Box>
+          </Box>
+
+          <Box width={narrow ? undefined : '25%'} flexDirection="column">
+            {renderRail()}
+          </Box>
+        </Box>
+      )}
+
+      {loading ? (
         <Box marginTop={1}>
           <Text color="yellow">{ui('Paneller yenileniyor...')}</Text>
         </Box>
       ) : null}
 
       {error ? (
-        <Box marginTop={1} flexDirection="column">
+        <Box marginTop={1}>
           <Panel
             title="Durum / Sorun"
             subtitle={error}
             badge="hata"
-            tone="red"
             selected
-            lines={errorPanelLines}
+            borderColor="red"
+            titleColor="redBright"
+            lines={[
+              loginSummary?.lastError ? `Son login hatasi: ${loginSummary.lastError}` : 'Son login hatasi kaydi yok.',
+              loginSummary?.lastUrl ? `Son baglanti: ${loginSummary.lastUrl}` : 'Son baglanti kaydi yok.',
+              loginSummary?.lastCode ? `Son cihaz kodu: ${loginSummary.lastCode}` : 'Son cihaz kodu kaydi yok.',
+            ]}
           />
         </Box>
       ) : null}
@@ -549,7 +828,7 @@ export function CliApp({ api, preferences }: AppProps) {
       ) : null}
 
       <Box marginTop={1} borderStyle="round" borderColor="gray" paddingX={1}>
-        <Text color="gray">{ui('? yardım • / komut • r yenile • h ana ekran • q çık')}</Text>
+        <Text color="gray">{ui('? yardim • / komut • Tab region • b buddy • r sert yenile • h home • q cikis')}</Text>
       </Box>
     </Box>
   );

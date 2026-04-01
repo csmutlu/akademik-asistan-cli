@@ -38,6 +38,15 @@ test('parses update command', () => {
   }
 });
 
+test('parses buddy message without lowercasing payload', () => {
+  const parsed = parseCommand(['buddy', 'Bugun', 'Neye', 'Odaklanayim?']);
+  assert.ok(parsed && parsed.ok);
+  if (parsed && parsed.ok) {
+    assert.equal(parsed.command.id, 'buddy');
+    assert.equal(parsed.command.args.message, 'Bugun Neye Odaklanayim?');
+  }
+});
+
 test('returns suggestion for close matches', () => {
   const parsed = parseCommand(['gundm']);
   assert.ok(parsed && !parsed.ok);

@@ -37,6 +37,7 @@ aasistan login
 aasistan login --no-open
 aasistan login --debug
 aasistan whoami
+aasistan buddy bugun neye odaklanayim
 aasistan gundem
 aasistan bugun
 aasistan duyurular
@@ -54,11 +55,13 @@ aasistan
 
 Inside the interface:
 
-- `j/k`, arrows, `Tab`: navigate panels
+- `Tab`: switch between dashboard, detail drawer, and right rail
+- `j/k`, arrows: move between dashboard cards
 - `Enter`: open selected view
+- `b`: toggle Buddy rail
 - `/`: command palette
 - `?`: help
-- `r`: refresh
+- `r`: hard refresh
 - `h`: back to home
 - `q`: quit
 
@@ -69,4 +72,5 @@ Inside the interface:
 - `aasistan login --debug` writes structured login traces to `~/.config/akademik-asistan/logs/cli-debug-YYYY-MM-DD.jsonl`
 - `AA_ASCII=1` forces ASCII fallback for terminal UI text
 - `aasistan watch` runs a brief always-on poller for agenda and announcement changes
+- `aasistan buddy ...` uses the built-in academic Buddy and persists local conversation history
 - local memory consolidation is written to `~/.config/akademik-asistan/MEMORY.md`

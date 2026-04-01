@@ -5,6 +5,7 @@ import type {
   AgendaPayload,
   AgendaSection,
   AnnouncementsPayload,
+  BuddyReplyPayload,
   CafeteriaPayload,
   CommandId,
   CommandResult,
@@ -60,6 +61,7 @@ export function renderHelpText(): string {
     '- Terminal cihaz kodu verir, web sayfası akademikasistan.com/cli-auth üstünde bu kodu kabul eder',
     '- Webde zaten giriş açıksa Ayarlar > Terminal / CLI alanına aynı kodu yapıştırıp terminali bağlayabilirsiniz',
     '- akademik-asistan whoami',
+    '- akademik-asistan buddy bugun neye odaklanayim',
     '- akademik-asistan gundem',
     '- akademik-asistan watch',
     '- aasistan gundem',
@@ -102,10 +104,11 @@ export function renderOnboardingText(): string {
     '5. akademik-asistan whoami',
     '6. akademik-asistan gundem',
     '7. akademik-asistan watch',
+    '8. akademik-asistan buddy bugun neye odaklanayim',
     '',
     'İnteraktif mod: aasistan',
     'Uzun komut: akademik-asistan',
-    'Slash komutları: /gundem, /bugun, /duyurular, /yemekhane, /teacher dashboard',
+    'Slash komutları: /gundem, /bugun, /duyurular, /yemekhane, /teacher dashboard, /buddy',
     'Konsolide hafıza: ~/.config/akademik-asistan/MEMORY.md',
   ].join('\n'));
 }
@@ -117,6 +120,15 @@ export function renderProfile(profile: Profile, title = 'Aktif oturum'): string 
     `E-posta  : ${profile.email || '-'}`,
     `Rol      : ${profile.role || '-'}`,
     `Numara   : ${profile.studentNumber || '-'}`,
+  ].join('\n'));
+}
+
+export function renderBuddyReply(payload: BuddyReplyPayload): string {
+  return ui([
+    divider('Buddy'),
+    payload.response,
+    '',
+    `Zaman: ${payload.timestamp}`,
   ].join('\n'));
 }
 
@@ -182,6 +194,8 @@ export function renderCommandResult(commandId: CommandId, result: CommandResult)
   switch (result.kind) {
     case 'profile':
       return renderProfile(result.data, commandId === 'login' ? 'Bağlandı' : 'Aktif oturum');
+    case 'buddy':
+      return renderBuddyReply(result.data);
     case 'agenda':
       return renderAgenda(result.data);
     case 'announcements':

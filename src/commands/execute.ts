@@ -1,5 +1,6 @@
 import { loginWithBrowser } from '../auth/login.js';
 import { ApiClient } from '../api/client.js';
+import { createBuddyMessage, loadBuddyHistory, persistBuddyHistory, trimBuddyHistory } from '../buddy/history.js';
 import { watchBrief } from '../services/watch.js';
 import type { CommandResult, ParsedCommand } from '../types.js';
 
@@ -26,6 +27,27 @@ export async function executeCommand(command: ParsedCommand, context: ExecuteCon
       return { kind: 'text', data: 'Oturum kapatıldı.' };
     case 'whoami':
       return { kind: 'profile', data: await api.getProfile() };
+    case 'buddy': {
+      const message = typeof command.args.message === 'string' ? command.args.message.trim() : '';
+      if (!message) {
+        return {
+          kind: 'text',
+          data: 'Buddy icin mesaj gerekli. Ornek: `aasistan buddy bugun neye odaklanayim`',
+        };
+      }
+      const history = await loadBuddyHistory();
+      const nextHistory = trimBuddyHistory([...history, createBuddyMessage('user', message)]);
+      await persistBuddyHistory(nextHistory).catch(() => undefined);
+      const reply = await api.sendBuddyMessage(message, nextHistory);
+      await persistBuddyHistory([
+        ...nextHistory,
+        createBuddyMessage('assistant', reply.response, reply.timestamp),
+      ]).catch(() => undefined);
+      return {
+        kind: 'buddy',
+        data: reply,
+      };
+    }
     case 'gundem':
     case 'bugun':
     case 'yarin':

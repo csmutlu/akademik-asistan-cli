@@ -3,7 +3,7 @@ import path from 'node:path';
 import { LOGS_DIR } from '../config.js';
 import { ensureLogsDir } from '../state/storage.js';
 
-type MemoryEvent = {
+export type MemoryEvent = {
   ts: string;
   type: 'session-start' | 'command';
   command?: string;

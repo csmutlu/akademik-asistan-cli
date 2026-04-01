@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { CONFIG_DIR, LOGS_DIR, MEMORY_STATE_FILE, PREFERENCES_FILE, SESSION_FILE } from '../config.js';
-import type { MemoryState, StoredPreferences, StoredSession } from '../types.js';
+import { BUDDY_HISTORY_FILE, CONFIG_DIR, LOGS_DIR, MEMORY_STATE_FILE, PREFERENCES_FILE, SESSION_FILE } from '../config.js';
+import type { BuddyMessage, MemoryState, StoredPreferences, StoredSession } from '../types.js';
 
 const DEFAULT_PREFERENCES: StoredPreferences = {
   onboardingSeen: false,
@@ -61,6 +61,15 @@ export async function readPreferences(): Promise<StoredPreferences> {
 
 export async function writePreferences(preferences: StoredPreferences): Promise<void> {
   await writeSecureJson(PREFERENCES_FILE, preferences);
+}
+
+export async function readBuddyHistory(): Promise<BuddyMessage[]> {
+  const stored = await readJsonFile<BuddyMessage[]>(BUDDY_HISTORY_FILE);
+  return Array.isArray(stored) ? stored : [];
+}
+
+export async function writeBuddyHistory(history: BuddyMessage[]): Promise<void> {
+  await writeSecureJson(BUDDY_HISTORY_FILE, history);
 }
 
 export async function readMemoryState(): Promise<MemoryState> {

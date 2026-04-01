@@ -38,6 +38,42 @@ type RequestOptions = {
   allowRetry?: boolean;
 };
 
+type SessionVerificationPayload = {
+  session?: {
+    access_token?: string | null;
+  } | null;
+  user?: {
+    id?: string | null;
+  } | null;
+};
+
+export function recoverConcurrentSession(
+  current: StoredSession,
+  candidate: StoredSession | null,
+): StoredSession | null {
+  if (!candidate) {
+    return null;
+  }
+
+  const currentUpdatedAt = Date.parse(current.updatedAt || '');
+  const candidateUpdatedAt = Date.parse(candidate.updatedAt || '');
+  const hasNewerTimestamp =
+    Number.isFinite(candidateUpdatedAt) &&
+    (!Number.isFinite(currentUpdatedAt) || candidateUpdatedAt > currentUpdatedAt);
+  const hasDifferentRefreshToken =
+    Boolean(candidate.session.refresh_token) &&
+    candidate.session.refresh_token !== current.session.refresh_token;
+  const hasDifferentAccessToken =
+    Boolean(candidate.session.access_token) &&
+    candidate.session.access_token !== current.session.access_token;
+
+  if (!hasNewerTimestamp && !hasDifferentRefreshToken && !hasDifferentAccessToken) {
+    return null;
+  }
+
+  return candidate;
+}
+
 export class ApiClient {
   readonly baseUrl: string;
   private refreshPromise: Promise<StoredSession> | null = null;
@@ -204,6 +240,16 @@ export class ApiClient {
 
     const payload = (await response.json().catch(() => ({}))) as RefreshPayload;
     if (!response.ok || !payload.session?.access_token || !payload.session?.refresh_token) {
+      const recovered = await this.recoverSessionFromDisk(stored);
+      if (recovered) {
+        return recovered;
+      }
+
+      const currentTokenStillWorks = await this.isAccessTokenStillValid(stored.session.access_token);
+      if (currentTokenStillWorks) {
+        return stored;
+      }
+
       await clearSession();
       throw new AuthRequiredError(payload.error || 'Oturum yenilenemedi. Tekrar giriş yap.');
     }
@@ -228,6 +274,34 @@ export class ApiClient {
     }
 
     return stored;
+  }
+
+  private async recoverSessionFromDisk(stored: StoredSession): Promise<StoredSession | null> {
+    return recoverConcurrentSession(stored, await readSession());
+  }
+
+  private async isAccessTokenStillValid(accessToken: string | undefined): Promise<boolean> {
+    if (!accessToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/auth/session`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const payload = (await response.json().catch(() => ({}))) as SessionVerificationPayload;
+      return Boolean(payload.user?.id && payload.session?.access_token);
+    } catch {
+      return false;
+    }
   }
 
   private async request<T>(pathname: string, options: RequestOptions = {}): Promise<T> {
@@ -257,6 +331,20 @@ export class ApiClient {
     }
 
     if (response.status === 401) {
+      const recovered = await this.recoverSessionFromDisk(stored);
+      if (recovered) {
+        return this.request<T>(pathname, {
+          method,
+          body,
+          allowRetry: false,
+        });
+      }
+
+      const currentTokenStillWorks = await this.isAccessTokenStillValid(stored.session.access_token);
+      if (currentTokenStillWorks) {
+        throw new ApiError((payload as { error?: string }).error || 'İstek yetkisiz.', response.status);
+      }
+
       await clearSession();
       throw new AuthRequiredError((payload as { error?: string }).error || 'Oturum süresi dolmuş. Tekrar giriş yap.');
     }

@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { BUDDY_HISTORY_FILE, CONFIG_DIR, LOGS_DIR, MEMORY_STATE_FILE, PREFERENCES_FILE, SESSION_FILE } from '../config.js';
 import type { BuddyMessage, MemoryState, StoredPreferences, StoredSession } from '../types.js';
 
@@ -27,12 +27,14 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
 
 async function writeSecureJson(filePath: string, value: unknown) {
   await ensureConfigDir();
-  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
   try {
-    await chmod(filePath, 0o600);
+    await chmod(tempPath, 0o600);
   } catch {
     // Ignore on platforms that do not support chmod semantics.
   }
+  await rename(tempPath, filePath);
 }
 
 export async function readSession(): Promise<StoredSession | null> {

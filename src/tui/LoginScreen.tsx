@@ -112,7 +112,7 @@ export function LoginScreen({ state, onOpen, onCancel }: LoginScreenProps) {
       <Box borderStyle="round" borderColor={tone} paddingX={1} paddingY={0} justifyContent="space-between">
         <Box flexDirection="column">
           <Text color={`${tone}Bright`}>{ui('Akademik Asistan CLI Login')}</Text>
-          <Text color="gray">{ui('Akademik Asistan web alanı tabanlı cihaz onayı')}</Text>
+          <Text color="gray">{ui('Worker domaini tabanlı cihaz onayı')}</Text>
         </Box>
         <Box flexDirection="column">
           <Text color="whiteBright">{ui(titleForStage(state.stage))}</Text>

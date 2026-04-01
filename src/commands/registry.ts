@@ -2,7 +2,7 @@ import type { CommandDefinition, CommandId, ParsedCommand } from '../types.js';
 
 const DEFINITIONS: CommandDefinition[] = [
   { id: 'login', path: ['login'], aliases: ['/login'], description: 'Tarayıcı ile cihaz girişini başlat', requiresAuth: false, example: 'aasistan login --debug' },
-  { id: 'update', path: ['update'], aliases: ['/update'], description: 'CLI sürümünü Homebrew ile güncelle', requiresAuth: false, example: 'aasistan update' },
+  { id: 'update', path: ['update'], aliases: ['/update'], description: 'CLI sürümünü paket yöneticisiyle güncelle', requiresAuth: false, example: 'aasistan update' },
   { id: 'logout', path: ['logout'], aliases: ['/logout'], description: 'Kayıtlı oturumu kapat', requiresAuth: false, example: 'aasistan logout' },
   { id: 'whoami', path: ['whoami'], aliases: ['/whoami'], description: 'Aktif kullanıcıyı göster', example: 'aasistan whoami' },
   { id: 'gundem', path: ['gundem'], aliases: ['/gundem'], description: 'Kişisel gündemi getir', example: 'aasistan gundem' },

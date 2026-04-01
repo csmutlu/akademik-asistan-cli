@@ -56,6 +56,7 @@ export function renderHelpText(): string {
     '- akademik-asistan update',
     '- akademik-asistan login --debug',
     '- akademik-asistan login --no-open',
+    '- `update` Homebrew varsa brew ile, yoksa npm tarball ile son sürümü kurar',
     '- Terminal cihaz kodu verir, web sayfası akademikasistan.com/cli-auth üstünde bu kodu kabul eder',
     '- Webde zaten giriş açıksa Ayarlar > Terminal / CLI alanına aynı kodu yapıştırıp terminali bağlayabilirsiniz',
     '- akademik-asistan whoami',

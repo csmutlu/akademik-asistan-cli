@@ -14,6 +14,7 @@ import { readRecentMemoryEvents, type MemoryEvent } from '../memory/log.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
 import { writePreferences } from '../state/storage.js';
 import { getIdentityLabel, getTransientFailureText } from './connection.js';
+import { getErrorPanelLines, getErrorPanelTitle, type ErrorSource } from './error-panel.js';
 import { getCliVersion } from '../version.js';
 import type {
   BuddyMessage,
@@ -273,6 +274,7 @@ export function CliApp({ api, preferences }: AppProps) {
   const [buddyHistory, setBuddyHistory] = useState<BuddyMessage[]>([]);
   const [activityLines, setActivityLines] = useState<string[]>([]);
   const [hasStoredSession, setHasStoredSession] = useState(false);
+  const [errorSource, setErrorSource] = useState<ErrorSource>('command');
 
   const deferredBuddyHistory = useDeferredValue(buddyHistory);
   const cards = buildCardState(home);
@@ -320,6 +322,7 @@ export function CliApp({ api, preferences }: AppProps) {
         syncPinnedDetail(payload, currentCommand);
       });
       setError(null);
+      setErrorSource('command');
       setStatus(forceRefresh ? 'Sert yenileme tamamlandı' : 'Dashboard güncel');
       await writePreferences({
         ...preferences,
@@ -335,10 +338,12 @@ export function CliApp({ api, preferences }: AppProps) {
         setCurrentResult(null);
         setStatus('Giriş gerekli');
         setError(null);
+        setErrorSource('auth');
         await refreshLoginSummary();
       } else {
         setHasStoredSession(await api.hasSession().catch(() => false));
         setError(err instanceof Error ? err.message : 'Veri yüklenemedi.');
+        setErrorSource('home');
         setStatus('Sorun var');
       }
     } finally {
@@ -370,6 +375,7 @@ export function CliApp({ api, preferences }: AppProps) {
       startTransition(() => setBuddyHistory(nextHistory));
       await persistBuddyHistory(nextHistory).catch(() => undefined);
       setError(null);
+      setErrorSource('command');
       setStatus('Buddy hazır');
     } catch (err) {
       const assistantMessage = createBuddyMessage(
@@ -380,6 +386,7 @@ export function CliApp({ api, preferences }: AppProps) {
       startTransition(() => setBuddyHistory(nextHistory));
       await persistBuddyHistory(nextHistory).catch(() => undefined);
       setError(err instanceof Error ? err.message : 'Buddy hatası');
+      setErrorSource('buddy');
       setStatus('Buddy sorunu');
     } finally {
       setBuddyLoading(false);
@@ -409,6 +416,7 @@ export function CliApp({ api, preferences }: AppProps) {
 
     setLoading(true);
     setError(null);
+    setErrorSource('command');
     try {
       const result = id === 'login'
         ? {
@@ -451,6 +459,7 @@ export function CliApp({ api, preferences }: AppProps) {
       setActiveRegion('detail');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Komut çalışmadı.');
+      setErrorSource(id === 'login' ? 'auth' : 'command');
       setStatus('Sorun var');
       await refreshLoginSummary();
     } finally {
@@ -468,6 +477,7 @@ export function CliApp({ api, preferences }: AppProps) {
     }
     if (!parsed.ok) {
       setError(parsed.suggestion ? `${parsed.error}. Sanırım: ${parsed.suggestion}` : parsed.error);
+      setErrorSource('command');
       setStatus('Sorun var');
       setCommandMode(false);
       setCommandInput('');
@@ -482,11 +492,13 @@ export function CliApp({ api, preferences }: AppProps) {
     }
     if (parsed.command.id === 'watch') {
       setError('`watch` komutunu TUI dışında, doğrudan terminalde çalıştır.');
+      setErrorSource('command');
       setStatus('Sorun var');
       return;
     }
     if (parsed.command.id === 'update') {
       setError('`update` komutunu TUI dışında, doğrudan terminalde çalıştır.');
+      setErrorSource('command');
       setStatus('Sorun var');
       return;
     }
@@ -827,17 +839,13 @@ export function CliApp({ api, preferences }: AppProps) {
       {error ? (
         <Box marginTop={1}>
           <Panel
-            title="Durum / Sorun"
+            title={getErrorPanelTitle(errorSource)}
             subtitle={error}
             badge="hata"
             selected
             borderColor="red"
             titleColor="redBright"
-            lines={[
-              loginSummary?.lastError ? `Son login hatası: ${loginSummary.lastError}` : 'Son login hatası kaydı yok.',
-              loginSummary?.lastUrl ? `Son bağlantı: ${loginSummary.lastUrl}` : 'Son bağlantı kaydı yok.',
-              loginSummary?.lastCode ? `Son cihaz kodu: ${loginSummary.lastCode}` : 'Son cihaz kodu kaydı yok.',
-            ]}
+            lines={getErrorPanelLines(errorSource, hasStoredSession, loginSummary, home ? formatTime(home.syncedAt) : null)}
           />
         </Box>
       ) : null}

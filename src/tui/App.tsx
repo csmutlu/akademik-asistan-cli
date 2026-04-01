@@ -10,9 +10,9 @@ import { HOME_REFRESH_INTERVAL_MS } from '../config.js';
 import { loadHomeSnapshot } from '../coordinator/home.js';
 import { ui } from '../display.js';
 import { readLatestLoginDebugSummary, type LoginDebugSummary } from '../logging/login-debug.js';
-import { readRecentMemoryEvents, type MemoryEvent } from '../memory/log.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
 import { writePreferences } from '../state/storage.js';
+import { buildActivityRailLines, pushActivityEntry, type ActivityEntry } from './activity.js';
 import { getIdentityLabel, getTransientFailureText } from './connection.js';
 import { getErrorPanelLines, getErrorPanelTitle, type ErrorSource } from './error-panel.js';
 import { isBackgroundRefresh, shouldKeepLastSnapshotOnError, type HomeRefreshReason } from './home-refresh.js';
@@ -155,17 +155,6 @@ function formatTime(iso: string | null | undefined): string {
   });
 }
 
-function formatActivityEvent(event: MemoryEvent): string {
-  const at = formatTime(event.ts);
-  if (event.type === 'session-start') {
-    return `${at} • Oturum başladı`;
-  }
-
-  const outcome = event.ok === false ? 'Hata' : 'Tamam';
-  const meta = event.meta?.mode ? ` • ${String(event.meta.mode)}` : '';
-  return `${at} • ${outcome} • ${event.command || 'komut'}${meta}`;
-}
-
 function buildDetailResult(home: HomePayload | null, commandId: HomeCard['id']): CommandResult | null {
   if (!home) {
     return null;
@@ -273,7 +262,7 @@ export function CliApp({ api, preferences }: AppProps) {
   const [railMode, setRailMode] = useState<RailMode>('activity');
   const [buddyInput, setBuddyInput] = useState('');
   const [buddyHistory, setBuddyHistory] = useState<BuddyMessage[]>([]);
-  const [activityLines, setActivityLines] = useState<string[]>([]);
+  const [activityEntries, setActivityEntries] = useState<ActivityEntry[]>([]);
   const [hasStoredSession, setHasStoredSession] = useState(false);
   const [errorSource, setErrorSource] = useState<ErrorSource>('command');
   const homeRequestRef = useRef<Promise<void> | null>(null);
@@ -297,9 +286,8 @@ export function CliApp({ api, preferences }: AppProps) {
     setLoginSummary(await readLatestLoginDebugSummary());
   };
 
-  const refreshActivity = async () => {
-    const events = await readRecentMemoryEvents(2);
-    setActivityLines(events.slice(-8).reverse().map(formatActivityEvent));
+  const pushActivity = (label: string, detail?: string) => {
+    setActivityEntries((current) => pushActivityEntry(current, label, detail));
   };
 
   const syncPinnedDetail = (nextHome: HomePayload, nextCommand: CommandId | 'home') => {
@@ -333,6 +321,13 @@ export function CliApp({ api, preferences }: AppProps) {
           setHasStoredSession(true);
           syncPinnedDetail(payload, currentCommand);
         });
+        if (!existingHome) {
+          pushActivity('Dashboard hazır', payload.profile.fullName || payload.profile.email || undefined);
+        } else if (forceRefresh) {
+          pushActivity('Sert yenileme tamamlandı');
+        } else if (reason === 'login') {
+          pushActivity('Login sonrası dashboard hazır');
+        }
         setError(null);
         setErrorSource('command');
         if (!silentRefresh || forceRefresh) {
@@ -353,6 +348,7 @@ export function CliApp({ api, preferences }: AppProps) {
           setStatus('Giriş gerekli');
           setError(null);
           setErrorSource('auth');
+          pushActivity('Login gerekiyor');
           await refreshLoginSummary();
           return;
         }
@@ -362,17 +358,18 @@ export function CliApp({ api, preferences }: AppProps) {
 
         if (shouldKeepLastSnapshotOnError(reason, Boolean(existingHome), nextHasStoredSession)) {
           setStatus('Arka plan yenilemesi başarısız; son snapshot korunuyor');
+          pushActivity('Arka plan yenilemesi tökezledi', 'son snapshot korunuyor');
           return;
         }
 
         setError(err instanceof Error ? err.message : 'Veri yüklenemedi.');
         setErrorSource('home');
         setStatus('Sorun var');
+        pushActivity('Dashboard alınamadı', err instanceof Error ? err.message : 'Veri yüklenemedi.');
       } finally {
         if (!silentRefresh) {
           setLoading(false);
         }
-        await refreshActivity().catch(() => undefined);
       }
     })();
 
@@ -399,6 +396,7 @@ export function CliApp({ api, preferences }: AppProps) {
     setRailMode('buddy');
     setActiveRegion('rail');
     setStatus('Buddy yazıyor');
+    pushActivity('Buddy sorusu gönderildi', trimmed);
 
     try {
       const reply = await api.sendBuddyMessage(trimmed, optimisticHistory);
@@ -409,6 +407,7 @@ export function CliApp({ api, preferences }: AppProps) {
       setError(null);
       setErrorSource('command');
       setStatus('Buddy hazır');
+      pushActivity('Buddy yanıtladı', reply.response);
     } catch (err) {
       const assistantMessage = createBuddyMessage(
         'assistant',
@@ -420,9 +419,9 @@ export function CliApp({ api, preferences }: AppProps) {
       setError(err instanceof Error ? err.message : 'Buddy hatası');
       setErrorSource('buddy');
       setStatus('Buddy sorunu');
+      pushActivity('Buddy hatası', err instanceof Error ? err.message : 'Buddy geçici olarak yanıt veremedi.');
     } finally {
       setBuddyLoading(false);
-      await refreshActivity().catch(() => undefined);
     }
   };
 
@@ -468,11 +467,15 @@ export function CliApp({ api, preferences }: AppProps) {
         setHasStoredSession(false);
         setCurrentCommand('home');
         setCurrentResult(null);
+        pushActivity('Oturum kapatıldı');
       } else if ((id === 'whoami' || id === 'login') && result.kind === 'profile') {
         setProfile(result.data);
         setHasStoredSession(true);
         setCurrentCommand(id);
         setCurrentResult(result);
+        if (id === 'login') {
+          pushActivity('Login tamamlandı', result.data.fullName || result.data.email || undefined);
+        }
       } else {
         setCurrentCommand(id);
         setCurrentResult(result);
@@ -493,10 +496,10 @@ export function CliApp({ api, preferences }: AppProps) {
       setError(err instanceof Error ? err.message : 'Komut çalışmadı.');
       setErrorSource(id === 'login' ? 'auth' : 'command');
       setStatus('Sorun var');
+      pushActivity(id === 'login' ? 'Login başarısız' : 'Komut başarısız', err instanceof Error ? err.message : 'Komut çalışmadı.');
       await refreshLoginSummary();
     } finally {
       setLoading(false);
-      await refreshActivity().catch(() => undefined);
     }
   };
 
@@ -539,14 +542,18 @@ export function CliApp({ api, preferences }: AppProps) {
 
   useEffect(() => {
     api.hasSession()
-      .then((value) => setHasStoredSession(value))
+      .then((value) => {
+        setHasStoredSession(value);
+        if (value) {
+          pushActivity('Kayıtlı oturum bulundu');
+        }
+      })
       .catch(() => undefined);
     loadBuddyHistory()
       .then((history) => setBuddyHistory(history))
       .catch(() => undefined);
     loadHome(false, 'initial').catch(() => undefined);
     refreshLoginSummary().catch(() => undefined);
-    refreshActivity().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -791,12 +798,18 @@ export function CliApp({ api, preferences }: AppProps) {
       );
     }
 
-    const lines = activityLines.length > 0 ? activityLines : ['Henüz etkinlik yok.'];
+    const lines = buildActivityRailLines({
+      profile,
+      hasStoredSession,
+      home,
+      error,
+      activityEntries,
+    });
     return (
       <Panel
-        title="Activity"
-        subtitle="Son oturum ve komut hareketleri"
-        badge={`${lines.length}`}
+        title="Canlı Durum"
+        subtitle="Anlık durum ve son önemli hareketler"
+        badge={home ? 'live' : 'bekle'}
         selected={activeRegion === 'rail'}
         borderColor="blue"
         titleColor="blueBright"

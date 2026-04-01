@@ -126,7 +126,7 @@ export function LoginScreen({ state, onOpen, onCancel }: LoginScreenProps) {
             <Text>{ui(state.loginUrl || 'Henüz oluşturulmadı')}</Text>
           </Frame>
 
-          <Frame title="Cihaz Kodu" subtitle="İsterseniz webde elle girebilirsiniz" color="yellow">
+          <Frame title="Cihaz Kodu" subtitle="Web sayfasında bu kodu girerek bağlayabilirsiniz" color="yellow">
             <Text>{ui(state.userCode || 'Hazırlanıyor')}</Text>
           </Frame>
 

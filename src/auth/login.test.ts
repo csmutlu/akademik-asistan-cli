@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFallbackProfile, secondsUntil } from './login.js';
+import { buildCliEntryUrl, buildCliPrefilledUrl, buildFallbackProfile, secondsUntil } from './login.js';
 
 test('secondsUntil returns null when no expiry is provided', () => {
   assert.equal(secondsUntil(null), null);
@@ -32,4 +32,18 @@ test('buildFallbackProfile keeps redeemed user identity', () => {
     studentNumber: null,
     role: 'unknown',
   });
+});
+
+test('buildCliEntryUrl normalizes the base path', () => {
+  assert.equal(
+    buildCliEntryUrl('https://akademik-assistant-api.csmutlu10.workers.dev/'),
+    'https://akademik-assistant-api.csmutlu10.workers.dev/cli-auth',
+  );
+});
+
+test('buildCliPrefilledUrl injects the device code', () => {
+  assert.equal(
+    buildCliPrefilledUrl('ABCD-EFGH', 'https://akademik-assistant-api.csmutlu10.workers.dev'),
+    'https://akademik-assistant-api.csmutlu10.workers.dev/cli-auth?code=ABCD-EFGH',
+  );
 });

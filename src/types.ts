@@ -32,6 +32,7 @@ export type CliLoginRequest = {
   requestId: string;
   userCode: string;
   pollToken: string;
+  entryUrl?: string;
   verificationUrl: string;
   expiresAt: string;
   intervalMs: number;

@@ -54,6 +54,16 @@ function formatExpiry(iso: string): string {
   });
 }
 
+export function buildCliEntryUrl(baseUrl = DEFAULT_WEB_BASE_URL): string {
+  return `${baseUrl.replace(/\/$/, '')}/cli-auth`;
+}
+
+export function buildCliPrefilledUrl(userCode: string, baseUrl = DEFAULT_WEB_BASE_URL): string {
+  const url = new URL(buildCliEntryUrl(baseUrl));
+  url.searchParams.set('code', userCode);
+  return url.toString();
+}
+
 export function secondsUntil(expiresAt: string | null): number | null {
   if (!expiresAt) {
     return null;
@@ -130,9 +140,10 @@ async function runLoginFlow(
   });
 
   const request = await api.createCliLoginRequest();
+  const entryUrl = request.entryUrl || buildCliEntryUrl(DEFAULT_WEB_BASE_URL);
   const loginUrl = request.verificationUrl.startsWith('http')
     ? request.verificationUrl
-    : `${DEFAULT_WEB_BASE_URL.replace(/\/$/, '')}/cli-auth?request=${encodeURIComponent(request.requestId)}`;
+    : buildCliPrefilledUrl(request.userCode, DEFAULT_WEB_BASE_URL);
 
   await recordLoginEvent('request-created', 'CLI login isteği oluşturuldu.', {
     requestId: request.requestId,
@@ -142,11 +153,13 @@ async function runLoginFlow(
   await recordLoginEvent('login-url-generated', 'Doğrulama bağlantısı üretildi.', {
     requestId: request.requestId,
     userCode: request.userCode,
+    entryUrl,
     loginUrl,
   });
 
-  printLine(`Giriş bağlantısı: ${loginUrl}`, printer);
+  printLine(`Giriş sayfası: ${entryUrl}`, printer);
   printLine(`Cihaz kodu: ${request.userCode}`, printer);
+  printLine(`Hazır bağlantı: ${loginUrl}`, printer);
   printLine(`Süre sonu: ${formatExpiry(request.expiresAt)}`, printer);
 
   if (debug) {

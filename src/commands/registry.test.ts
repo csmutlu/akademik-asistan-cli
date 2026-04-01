@@ -39,11 +39,11 @@ test('parses update command', () => {
 });
 
 test('parses buddy message without lowercasing payload', () => {
-  const parsed = parseCommand(['buddy', 'Bugun', 'Neye', 'Odaklanayim?']);
+  const parsed = parseCommand(['buddy', 'Bugün', 'Neye', 'Odaklanayım?']);
   assert.ok(parsed && parsed.ok);
   if (parsed && parsed.ok) {
     assert.equal(parsed.command.id, 'buddy');
-    assert.equal(parsed.command.args.message, 'Bugun Neye Odaklanayim?');
+    assert.equal(parsed.command.args.message, 'Bugün Neye Odaklanayım?');
   }
 });
 

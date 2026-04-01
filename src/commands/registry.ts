@@ -5,7 +5,7 @@ const DEFINITIONS: CommandDefinition[] = [
   { id: 'update', path: ['update'], aliases: ['/update'], description: 'CLI sürümünü paket yöneticisiyle güncelle', requiresAuth: false, example: 'aasistan update' },
   { id: 'logout', path: ['logout'], aliases: ['/logout'], description: 'Kayıtlı oturumu kapat', requiresAuth: false, example: 'aasistan logout' },
   { id: 'whoami', path: ['whoami'], aliases: ['/whoami'], description: 'Aktif kullanıcıyı göster', example: 'aasistan whoami' },
-  { id: 'buddy', path: ['buddy'], aliases: ['/buddy'], description: 'Akademik buddy ile sohbet et', example: 'aasistan buddy bugun neye odaklanayim' },
+  { id: 'buddy', path: ['buddy'], aliases: ['/buddy'], description: 'Akademik buddy ile sohbet et', example: 'aasistan buddy bugün neye odaklanayım' },
   { id: 'gundem', path: ['gundem'], aliases: ['/gundem'], description: 'Kişisel gündemi getir', example: 'aasistan gundem' },
   { id: 'bugun', path: ['bugun'], aliases: ['/bugun'], description: 'Bugünün ders, ödev ve sınavları', example: 'aasistan bugun' },
   { id: 'yarin', path: ['yarin'], aliases: ['/yarin'], description: 'Yarının akademik kayıtları', example: 'aasistan yarin' },

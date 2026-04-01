@@ -30,13 +30,13 @@ function renderCommandSummary(events: Awaited<ReturnType<typeof readRecentMemory
     ...(topCommands.length > 0 ? topCommands : ['- Yeterli komut verisi yok']),
     '',
     '## Riskler',
-    ...(failures.length > 0 ? Array.from(new Set(failures)).slice(0, 5).map((command) => `- Son hatali komut: ${command}`) : ['- Son donemde belirgin hata yok']),
+    ...(failures.length > 0 ? Array.from(new Set(failures)).slice(0, 5).map((command) => `- Son hatalı komut: ${command}`) : ['- Son dönemde belirgin hata yok']),
   ];
 }
 
 function renderProfileSummary(profile: Profile | null): string[] {
   return [
-    '## Son kullanici',
+    '## Son kullanıcı',
     `- Ad: ${profile?.fullName || '-'}`,
     `- E-posta: ${profile?.email || '-'}`,
     `- Rol: ${profile?.role || '-'}`,
@@ -115,14 +115,14 @@ export async function maybeRunDream(profile: Profile | null): Promise<boolean> {
     const nextMemory = [
       '# Akademik Asistan CLI Memory',
       '',
-      `Guncellendi: ${new Date().toISOString()}`,
+      `Güncellendi: ${new Date().toISOString()}`,
       '',
       ...renderProfileSummary(profile),
       '',
       ...renderCommandSummary(events),
       '',
       '## Son not',
-      previousMemory.trim() ? '- Onceki konsolidasyon ustune yazildi.' : '- Ilk konsolidasyon olustu.',
+      previousMemory.trim() ? '- Önceki konsolidasyon üstüne yazıldı.' : '- İlk konsolidasyon oluştu.',
       '',
     ].join('\n');
 

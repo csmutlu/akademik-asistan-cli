@@ -38,7 +38,7 @@ async function sendDesktopNotification(title: string, message: string) {
 export async function watchBrief(api: ApiClient, onUpdate: (line: string) => void): Promise<void> {
   let previous: WatchSnapshot | null = null;
 
-  onUpdate(`KAIROS brief basladi. Aralik: ${Math.round(WATCH_INTERVAL_MS / 1000)} sn`);
+  onUpdate(`KAIROS brief başladı. Aralık: ${Math.round(WATCH_INTERVAL_MS / 1000)} sn`);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -48,12 +48,12 @@ export async function watchBrief(api: ApiClient, onUpdate: (line: string) => voi
     if (!previous) {
       previous = current;
       onUpdate(
-        `Baslangic - ${current.agendaTop || 'gundem bos'} - ${current.announcementsTop || 'duyuru yok'}`,
+        `Başlangıç - ${current.agendaTop || 'gündem boş'} - ${current.announcementsTop || 'duyuru yok'}`,
       );
     } else {
       if (current.agendaTop !== previous.agendaTop && current.agendaTop) {
-        onUpdate(`Gundem degisti - ${current.agendaTop}`);
-        await sendDesktopNotification('Akademik Asistan', `Yeni gundem: ${current.agendaTop}`);
+        onUpdate(`Gündem değişti - ${current.agendaTop}`);
+        await sendDesktopNotification('Akademik Asistan', `Yeni gündem: ${current.agendaTop}`);
       }
       if (current.announcementsTop !== previous.announcementsTop && current.announcementsTop) {
         onUpdate(`Yeni duyuru - ${current.announcementsTop}`);

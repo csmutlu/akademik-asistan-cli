@@ -32,7 +32,7 @@ export async function executeCommand(command: ParsedCommand, context: ExecuteCon
       if (!message) {
         return {
           kind: 'text',
-          data: 'Buddy icin mesaj gerekli. Ornek: `aasistan buddy bugun neye odaklanayim`',
+          data: 'Buddy için mesaj gerekli. Örnek: `aasistan buddy bugün neye odaklanayım`',
         };
       }
       const history = await loadBuddyHistory();

@@ -127,7 +127,7 @@ export class ApiClient {
   async refreshSession(force = false): Promise<StoredSession> {
     const stored = await readSession();
     if (!stored) {
-      throw new AuthRequiredError('Oturum bulunamadi. `aasistan login` veya `akademik-asistan login` calistir.');
+      throw new AuthRequiredError('Oturum bulunamadı. `aasistan login` veya `akademik-asistan login` çalıştır.');
     }
 
     if (!force && !this.isExpiring(stored.session)) {
@@ -205,7 +205,7 @@ export class ApiClient {
     const payload = (await response.json().catch(() => ({}))) as RefreshPayload;
     if (!response.ok || !payload.session?.access_token || !payload.session?.refresh_token) {
       await clearSession();
-      throw new AuthRequiredError(payload.error || 'Oturum yenilenemedi. Tekrar giris yap.');
+      throw new AuthRequiredError(payload.error || 'Oturum yenilenemedi. Tekrar giriş yap.');
     }
 
     const next: StoredSession = {
@@ -220,7 +220,7 @@ export class ApiClient {
   private async getValidStoredSession(): Promise<StoredSession> {
     const stored = await readSession();
     if (!stored) {
-      throw new AuthRequiredError('Oturum bulunamadi. `aasistan login` veya `akademik-asistan login` calistir.');
+      throw new AuthRequiredError('Oturum bulunamadı. `aasistan login` veya `akademik-asistan login` çalıştır.');
     }
 
     if (this.isExpiring(stored.session)) {
@@ -258,9 +258,9 @@ export class ApiClient {
 
     if (response.status === 401) {
       await clearSession();
-      throw new AuthRequiredError((payload as { error?: string }).error || 'Oturum suresi dolmus. Tekrar giris yap.');
+      throw new AuthRequiredError((payload as { error?: string }).error || 'Oturum süresi dolmuş. Tekrar giriş yap.');
     }
 
-    throw new ApiError((payload as { error?: string }).error || 'Istek basarisiz.', response.status);
+    throw new ApiError((payload as { error?: string }).error || 'İstek başarısız.', response.status);
   }
 }

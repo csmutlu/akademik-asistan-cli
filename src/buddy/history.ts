@@ -28,6 +28,6 @@ export async function persistBuddyHistory(history: BuddyMessage[]): Promise<void
 export function getBuddyWelcomeMessage(): BuddyMessage {
   return createBuddyMessage(
     'assistant',
-    'Buddy hazir. Geciken verileri yorumlayabilir, bugunu ozetleyebilir ve odak plani onerebilirim.',
+    'Buddy hazır. Geciken verileri yorumlayabilir, bugünü özetleyebilir ve odak planı önerebilirim.',
   );
 }

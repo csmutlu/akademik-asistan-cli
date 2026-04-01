@@ -13,6 +13,7 @@ import { readLatestLoginDebugSummary, type LoginDebugSummary } from '../logging/
 import { readRecentMemoryEvents, type MemoryEvent } from '../memory/log.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
 import { writePreferences } from '../state/storage.js';
+import { getIdentityLabel, getTransientFailureText } from './connection.js';
 import { getCliVersion } from '../version.js';
 import type {
   BuddyMessage,
@@ -271,6 +272,7 @@ export function CliApp({ api, preferences }: AppProps) {
   const [buddyInput, setBuddyInput] = useState('');
   const [buddyHistory, setBuddyHistory] = useState<BuddyMessage[]>([]);
   const [activityLines, setActivityLines] = useState<string[]>([]);
+  const [hasStoredSession, setHasStoredSession] = useState(false);
 
   const deferredBuddyHistory = useDeferredValue(buddyHistory);
   const cards = buildCardState(home);
@@ -314,6 +316,7 @@ export function CliApp({ api, preferences }: AppProps) {
       startTransition(() => {
         setHome(payload);
         setProfile(payload.profile);
+        setHasStoredSession(true);
         syncPinnedDetail(payload, currentCommand);
       });
       setError(null);
@@ -327,12 +330,14 @@ export function CliApp({ api, preferences }: AppProps) {
       if (err instanceof AuthRequiredError) {
         setProfile(null);
         setHome(null);
+        setHasStoredSession(false);
         setCurrentCommand('home');
         setCurrentResult(null);
         setStatus('Giriş gerekli');
         setError(null);
         await refreshLoginSummary();
       } else {
+        setHasStoredSession(await api.hasSession().catch(() => false));
         setError(err instanceof Error ? err.message : 'Veri yüklenemedi.');
         setStatus('Sorun var');
       }
@@ -420,10 +425,12 @@ export function CliApp({ api, preferences }: AppProps) {
       if (id === 'logout') {
         setProfile(null);
         setHome(null);
+        setHasStoredSession(false);
         setCurrentCommand('home');
         setCurrentResult(null);
-      } else if (id === 'whoami' && result.kind === 'profile') {
+      } else if ((id === 'whoami' || id === 'login') && result.kind === 'profile') {
         setProfile(result.data);
+        setHasStoredSession(true);
         setCurrentCommand(id);
         setCurrentResult(result);
       } else {
@@ -487,6 +494,9 @@ export function CliApp({ api, preferences }: AppProps) {
   };
 
   useEffect(() => {
+    api.hasSession()
+      .then((value) => setHasStoredSession(value))
+      .catch(() => undefined);
     loadBuddyHistory()
       .then((history) => setBuddyHistory(history))
       .catch(() => undefined);
@@ -497,13 +507,13 @@ export function CliApp({ api, preferences }: AppProps) {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (profile) {
+      if (hasStoredSession) {
         loadHome(false).catch(() => undefined);
       }
     }, HOME_REFRESH_INTERVAL_MS);
 
     return () => clearInterval(timer);
-  }, [profile, currentCommand]);
+  }, [hasStoredSession, currentCommand]);
 
   const cycleRegion = () => {
     setActiveRegion((current) => {
@@ -566,7 +576,7 @@ export function CliApp({ api, preferences }: AppProps) {
     }
 
     if (input === 'r') {
-      if (profile) {
+      if (hasStoredSession) {
         loadHome(true).catch(() => undefined);
       }
       return;
@@ -599,23 +609,30 @@ export function CliApp({ api, preferences }: AppProps) {
     }
   });
 
-  const identityLabel = profile
-    ? `${profile.fullName || profile.email || 'Kullanıcı'} • ${profile.role}`
-    : 'Bağlanmamış oturum';
+  const identityLabel = getIdentityLabel(profile, hasStoredSession);
   const syncLine = home
     ? `Synced ${formatTime(home.syncedAt)} • Duyuru cache ${home.freshness.announcements.cached ? 'on' : 'off'} • Stale ${home.freshness.announcements.stale ? 'on' : 'off'}`
-    : 'Home snapshot bekleniyor';
+    : hasStoredSession
+      ? 'Oturum var • home snapshot bekleniyor'
+      : 'Home snapshot bekleniyor';
   const commandLine = currentCommand === 'home'
     ? `Detay: ${selectedCard?.title || '-'}`
     : `Pimli detay: ${detailTitle}`;
 
   const renderAnonymousHome = () => {
-    const connectionLines = [
-      'aasistan login',
-      'aasistan login --no-open',
-      'aasistan login --debug',
-      'aasistan whoami',
-    ];
+    const connectionLines = hasStoredSession
+      ? [
+          'r ile dashboard yeniden dene',
+          'aasistan whoami',
+          'aasistan gundem',
+          'aasistan watch',
+        ]
+      : [
+          'aasistan login',
+          'aasistan login --no-open',
+          'aasistan login --debug',
+          'aasistan whoami',
+        ];
 
     if (loginSummary?.lastUrl) {
       connectionLines.push(`Son bağlantı: ${loginSummary.lastUrl}`);
@@ -628,12 +645,12 @@ export function CliApp({ api, preferences }: AppProps) {
     }
 
     return (
-      <Panel
-        title="Bağlan"
-        subtitle="Tarayıcı login bağlantısı terminale yazdırılır."
-        badge="login"
-        borderColor="green"
-        titleColor="greenBright"
+        <Panel
+        title={hasStoredSession ? 'Oturum açık' : 'Bağlan'}
+        subtitle={hasStoredSession ? 'Kimlik doğrulama duruyor, ama dashboard şu anda alınamadı.' : 'Tarayıcı login bağlantısı terminale yazdırılır.'}
+        badge={hasStoredSession ? 'retry' : 'login'}
+        borderColor={hasStoredSession ? 'yellow' : 'green'}
+        titleColor={hasStoredSession ? 'yellowBright' : 'greenBright'}
         selected={activeRegion === 'grid'}
         lines={connectionLines}
       />
@@ -684,6 +701,11 @@ export function CliApp({ api, preferences }: AppProps) {
 
   const renderDetailBody = () => {
     if (!profile) {
+      const transientFailureText = getTransientFailureText(hasStoredSession);
+      if (transientFailureText) {
+        return <Text>{ui(transientFailureText)}</Text>;
+      }
+
       return (
         <Text>{ui(renderOnboardingText())}</Text>
       );

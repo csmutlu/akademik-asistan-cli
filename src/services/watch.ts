@@ -7,15 +7,22 @@ import type { HomePayload } from '../types.js';
 const execFileAsync = promisify(execFile);
 
 type WatchSnapshot = {
-  agendaTop: string | null;
-  announcementsTop: string | null;
+  agendaTopKey: string | null;
+  agendaTopLabel: string | null;
+  announcementsTopKey: string | null;
+  announcementsTopLabel: string | null;
   syncedAt: string | null;
 };
 
 export function snapshotKey(home: HomePayload): WatchSnapshot {
+  const agendaTop = home.cards.gundem.items[0] || null;
+  const announcementTop = home.cards.duyurular.items[0] || null;
+
   return {
-    agendaTop: home.cards.gundem.items[0] ? `${home.cards.gundem.items[0].title}|${home.cards.gundem.items[0].badge}` : null,
-    announcementsTop: home.cards.duyurular.items[0]?.title || null,
+    agendaTopKey: agendaTop ? `${agendaTop.id}|${agendaTop.date}` : null,
+    agendaTopLabel: agendaTop ? `${agendaTop.title}|${agendaTop.badge}` : null,
+    announcementsTopKey: announcementTop?.id || null,
+    announcementsTopLabel: announcementTop?.title || null,
     syncedAt: home.syncedAt || null,
   };
 }
@@ -48,16 +55,16 @@ export async function watchBrief(api: ApiClient, onUpdate: (line: string) => voi
     if (!previous) {
       previous = current;
       onUpdate(
-        `Başlangıç - ${current.agendaTop || 'gündem boş'} - ${current.announcementsTop || 'duyuru yok'}`,
+        `Başlangıç - ${current.agendaTopLabel || 'gündem boş'} - ${current.announcementsTopLabel || 'duyuru yok'}`,
       );
     } else {
-      if (current.agendaTop !== previous.agendaTop && current.agendaTop) {
-        onUpdate(`Gündem değişti - ${current.agendaTop}`);
-        await sendDesktopNotification('Akademik Asistan', `Yeni gündem: ${current.agendaTop}`);
+      if (current.agendaTopKey !== previous.agendaTopKey && current.agendaTopLabel) {
+        onUpdate(`Gündem değişti - ${current.agendaTopLabel}`);
+        await sendDesktopNotification('Akademik Asistan', `Yeni gündem: ${current.agendaTopLabel}`);
       }
-      if (current.announcementsTop !== previous.announcementsTop && current.announcementsTop) {
-        onUpdate(`Yeni duyuru - ${current.announcementsTop}`);
-        await sendDesktopNotification('Akademik Asistan', `Yeni duyuru: ${current.announcementsTop}`);
+      if (current.announcementsTopKey !== previous.announcementsTopKey && current.announcementsTopLabel) {
+        onUpdate(`Yeni duyuru - ${current.announcementsTopLabel}`);
+        await sendDesktopNotification('Akademik Asistan', `Yeni duyuru: ${current.announcementsTopLabel}`);
       }
       previous = current;
     }

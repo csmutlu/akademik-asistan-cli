@@ -312,6 +312,9 @@ export function CliApp({ api, preferences }: AppProps) {
       if (!silentRefresh) {
         setLoading(true);
       }
+      if (existingHome) {
+        setError(null);
+      }
 
       try {
         const payload = await loadHomeSnapshot(api, forceRefresh);
@@ -356,9 +359,17 @@ export function CliApp({ api, preferences }: AppProps) {
         const nextHasStoredSession = await api.hasSession().catch(() => false);
         setHasStoredSession(nextHasStoredSession);
 
-        if (shouldKeepLastSnapshotOnError(reason, Boolean(existingHome), nextHasStoredSession)) {
-          setStatus('Arka plan yenilemesi başarısız; son snapshot korunuyor');
-          pushActivity('Arka plan yenilemesi tökezledi', 'son snapshot korunuyor');
+        if (shouldKeepLastSnapshotOnError(Boolean(existingHome), nextHasStoredSession, err)) {
+          setError(null);
+          setStatus(
+            reason === 'auto'
+              ? 'Arka plan yenilemesi yavaş; son veri korunuyor'
+              : 'Bağlantı yavaş; son veri korunuyor',
+          );
+          pushActivity(
+            reason === 'auto' ? 'Arka plan yenilemesi yavaşladı' : 'Dashboard yenilemesi yavaşladı',
+            err instanceof Error ? err.message : 'Veri yüklenemedi.',
+          );
           return;
         }
 

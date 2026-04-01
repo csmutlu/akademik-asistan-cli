@@ -1,4 +1,4 @@
-import React, { startTransition, useDeferredValue, useEffect, useState } from 'react';
+import React, { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { ApiClient, AuthRequiredError } from '../api/client.js';
@@ -15,6 +15,7 @@ import { renderCommandResult, renderHelpText, renderOnboardingText } from '../pr
 import { writePreferences } from '../state/storage.js';
 import { getIdentityLabel, getTransientFailureText } from './connection.js';
 import { getErrorPanelLines, getErrorPanelTitle, type ErrorSource } from './error-panel.js';
+import { isBackgroundRefresh, shouldKeepLastSnapshotOnError, type HomeRefreshReason } from './home-refresh.js';
 import { getCliVersion } from '../version.js';
 import type {
   BuddyMessage,
@@ -275,6 +276,7 @@ export function CliApp({ api, preferences }: AppProps) {
   const [activityLines, setActivityLines] = useState<string[]>([]);
   const [hasStoredSession, setHasStoredSession] = useState(false);
   const [errorSource, setErrorSource] = useState<ErrorSource>('command');
+  const homeRequestRef = useRef<Promise<void> | null>(null);
 
   const deferredBuddyHistory = useDeferredValue(buddyHistory);
   const cards = buildCardState(home);
@@ -311,44 +313,74 @@ export function CliApp({ api, preferences }: AppProps) {
     }
   };
 
-  const loadHome = async (forceRefresh = false) => {
-    setLoading(true);
-    try {
-      const payload = await loadHomeSnapshot(api, forceRefresh);
-      startTransition(() => {
-        setHome(payload);
-        setProfile(payload.profile);
-        setHasStoredSession(true);
-        syncPinnedDetail(payload, currentCommand);
-      });
-      setError(null);
-      setErrorSource('command');
-      setStatus(forceRefresh ? 'Sert yenileme tamamlandı' : 'Dashboard güncel');
-      await writePreferences({
-        ...preferences,
-        onboardingSeen: true,
-        lastView: currentCommand === 'home' ? null : currentCommand,
-      });
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        setProfile(null);
-        setHome(null);
-        setHasStoredSession(false);
-        setCurrentCommand('home');
-        setCurrentResult(null);
-        setStatus('Giriş gerekli');
+  const loadHome = async (forceRefresh = false, reason: HomeRefreshReason = 'manual') => {
+    if (homeRequestRef.current) {
+      return homeRequestRef.current;
+    }
+
+    const task = (async () => {
+      const existingHome = home;
+      const silentRefresh = isBackgroundRefresh(reason, Boolean(existingHome));
+      if (!silentRefresh) {
+        setLoading(true);
+      }
+
+      try {
+        const payload = await loadHomeSnapshot(api, forceRefresh);
+        startTransition(() => {
+          setHome(payload);
+          setProfile(payload.profile);
+          setHasStoredSession(true);
+          syncPinnedDetail(payload, currentCommand);
+        });
         setError(null);
-        setErrorSource('auth');
-        await refreshLoginSummary();
-      } else {
-        setHasStoredSession(await api.hasSession().catch(() => false));
+        setErrorSource('command');
+        if (!silentRefresh || forceRefresh) {
+          setStatus(forceRefresh ? 'Sert yenileme tamamlandı' : 'Dashboard güncel');
+        }
+        await writePreferences({
+          ...preferences,
+          onboardingSeen: true,
+          lastView: currentCommand === 'home' ? null : currentCommand,
+        });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          setProfile(null);
+          setHome(null);
+          setHasStoredSession(false);
+          setCurrentCommand('home');
+          setCurrentResult(null);
+          setStatus('Giriş gerekli');
+          setError(null);
+          setErrorSource('auth');
+          await refreshLoginSummary();
+          return;
+        }
+
+        const nextHasStoredSession = await api.hasSession().catch(() => false);
+        setHasStoredSession(nextHasStoredSession);
+
+        if (shouldKeepLastSnapshotOnError(reason, Boolean(existingHome), nextHasStoredSession)) {
+          setStatus('Arka plan yenilemesi başarısız; son snapshot korunuyor');
+          return;
+        }
+
         setError(err instanceof Error ? err.message : 'Veri yüklenemedi.');
         setErrorSource('home');
         setStatus('Sorun var');
+      } finally {
+        if (!silentRefresh) {
+          setLoading(false);
+        }
+        await refreshActivity().catch(() => undefined);
       }
+    })();
+
+    homeRequestRef.current = task;
+    try {
+      await task;
     } finally {
-      setLoading(false);
-      await refreshActivity().catch(() => undefined);
+      homeRequestRef.current = null;
     }
   };
 
@@ -448,7 +480,7 @@ export function CliApp({ api, preferences }: AppProps) {
 
       if (id === 'login') {
         await refreshLoginSummary();
-        await loadHome(true);
+        await loadHome(true, 'login');
       }
 
       if (id === 'logout') {
@@ -512,7 +544,7 @@ export function CliApp({ api, preferences }: AppProps) {
     loadBuddyHistory()
       .then((history) => setBuddyHistory(history))
       .catch(() => undefined);
-    loadHome().catch(() => undefined);
+    loadHome(false, 'initial').catch(() => undefined);
     refreshLoginSummary().catch(() => undefined);
     refreshActivity().catch(() => undefined);
   }, []);
@@ -520,7 +552,7 @@ export function CliApp({ api, preferences }: AppProps) {
   useEffect(() => {
     const timer = setInterval(() => {
       if (hasStoredSession) {
-        loadHome(false).catch(() => undefined);
+        loadHome(false, 'auto').catch(() => undefined);
       }
     }, HOME_REFRESH_INTERVAL_MS);
 
@@ -589,7 +621,7 @@ export function CliApp({ api, preferences }: AppProps) {
 
     if (input === 'r') {
       if (hasStoredSession) {
-        loadHome(true).catch(() => undefined);
+        loadHome(true, 'manual').catch(() => undefined);
       }
       return;
     }

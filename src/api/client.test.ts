@@ -48,3 +48,17 @@ test('recoverConcurrentSession accepts newer timestamps even when tokens match',
 
   assert.deepEqual(recoverConcurrentSession(current, candidate), candidate);
 });
+
+test('recoverConcurrentSession accepts a concurrently provisioned device token', () => {
+  const current = createSession();
+  const candidate = createSession({
+    device: {
+      deviceId: 'device-1',
+      deviceToken: 'aasistan_dt_device-1',
+      expiresAt: '2027-04-01T18:00:00.000Z',
+      issuedAt: '2026-04-01T18:00:00.000Z',
+    },
+  });
+
+  assert.deepEqual(recoverConcurrentSession(current, candidate), candidate);
+});

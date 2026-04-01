@@ -254,6 +254,21 @@ async function runLoginFlow(
     });
 
     try {
+      await api.ensureDeviceSession(true);
+      await recordLoginEvent('device-session', 'CLI cihaz oturumu oluşturuldu.', {
+        requestId: request.requestId,
+        userId: result.user.id,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'CLI cihaz oturumu oluşturulamadı.';
+      await recordLoginEvent('device-session', message, {
+        requestId: request.requestId,
+        userId: result.user.id,
+        failed: true,
+      });
+    }
+
+    try {
       const profile = await api.getProfile();
       await recordLoginEvent('profile-fetch', 'Profil başarıyla alındı.', {
         requestId: request.requestId,

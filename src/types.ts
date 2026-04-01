@@ -30,6 +30,13 @@ export type CliUser = {
   email?: string | null;
 };
 
+export type CliDeviceSession = {
+  deviceId: string;
+  deviceToken: string;
+  expiresAt: string;
+  issuedAt: string;
+};
+
 export type CliLoginRequest = {
   requestId: string;
   userCode: string;
@@ -70,6 +77,7 @@ export type CliLoginRequestSummary = {
 export type StoredSession = {
   session: CliSession;
   user: CliUser;
+  device?: CliDeviceSession | null;
   updatedAt: string;
 };
 

@@ -374,6 +374,16 @@ export function CliApp({ api, preferences }: AppProps) {
   const identityLabel = profile
     ? `${profile.fullName || profile.email || 'Kullanıcı'} • ${profile.role}`
     : 'Bağlanmamış oturum';
+  const showLoginDiagnostics = !profile || currentCommand === 'login' || status === 'Giriş gerekli';
+  const errorPanelLines = showLoginDiagnostics
+    ? [
+        loginSummary?.lastError ? `Son login hatası: ${loginSummary.lastError}` : 'Son login hatası kaydı yok.',
+        loginSummary?.lastUrl ? `Son bağlantı: ${loginSummary.lastUrl}` : 'Son bağlantı kaydı yok.',
+        loginSummary?.lastCode ? `Son cihaz kodu: ${loginSummary.lastCode}` : 'Son cihaz kodu kaydı yok.',
+        loginSummary?.lastRequestId ? `Son istek: ${loginSummary.lastRequestId}` : 'Son istek kaydı yok.',
+        loginSummary?.logPath ? `Debug logu: ${loginSummary.logPath}` : 'Debug logu henüz oluşmadı.',
+      ]
+    : [];
 
   const renderHomeScreen = () => {
     if (!profile) {
@@ -511,13 +521,7 @@ export function CliApp({ api, preferences }: AppProps) {
             badge="hata"
             tone="red"
             selected
-            lines={[
-              loginSummary?.lastError ? `Son login hatası: ${loginSummary.lastError}` : 'Son login hatası kaydı yok.',
-              loginSummary?.lastUrl ? `Son bağlantı: ${loginSummary.lastUrl}` : 'Son bağlantı kaydı yok.',
-              loginSummary?.lastCode ? `Son cihaz kodu: ${loginSummary.lastCode}` : 'Son cihaz kodu kaydı yok.',
-              loginSummary?.lastRequestId ? `Son istek: ${loginSummary.lastRequestId}` : 'Son istek kaydı yok.',
-              loginSummary?.logPath ? `Debug logu: ${loginSummary.logPath}` : 'Debug logu henüz oluşmadı.',
-            ]}
+            lines={errorPanelLines}
           />
         </Box>
       ) : null}

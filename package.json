@@ -1,12 +1,11 @@
 {
   "name": "aasistan",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Akademik Asistan command line interface",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/csmutlu/akademik-asistan-cli.git",
-    "directory": "cli"
+    "url": "git+https://github.com/csmutlu/akademik-asistan-cli.git"
   },
   "homepage": "https://github.com/csmutlu/akademik-asistan-cli",
   "bugs": {

@@ -31,6 +31,63 @@ export type LoginDebugSummary = {
   lastEventType: LoginDebugEventType | null;
 };
 
+function isSuccessfulProfileFetch(event: LoginDebugEvent): boolean {
+  return event.type === 'profile-fetch' && event.meta?.failed !== true;
+}
+
+export function summarizeLoginDebugEvents(
+  events: LoginDebugEvent[],
+  logPath: string,
+): LoginDebugSummary | null {
+  let summary: LoginDebugSummary | null = null;
+
+  for (const event of events) {
+    if (!summary) {
+      summary = {
+        logPath,
+        lastTimestamp: null,
+        lastUrl: null,
+        lastCode: null,
+        lastRequestId: null,
+        lastError: null,
+        lastEventType: null,
+      };
+    }
+
+    summary.logPath = logPath;
+    summary.lastTimestamp = event.ts;
+    summary.lastEventType = event.type;
+
+    const url = typeof event.meta?.loginUrl === 'string' ? event.meta.loginUrl : null;
+    const code = event.meta?.userCode;
+    const requestId = event.meta?.requestId;
+    if (url) {
+      summary.lastUrl = url;
+    }
+    if (typeof code === 'string') {
+      summary.lastCode = code;
+    }
+    if (typeof requestId === 'string') {
+      summary.lastRequestId = requestId;
+    }
+
+    if (
+      event.type === 'login-start' ||
+      event.type === 'request-created' ||
+      event.type === 'session-stored' ||
+      isSuccessfulProfileFetch(event)
+    ) {
+      summary.lastError = null;
+    }
+
+    if (event.type === 'login-error' && event.message) {
+      summary.lastError = event.message;
+    }
+  }
+
+  return summary;
+}
+
 function dayStamp(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
@@ -56,6 +113,7 @@ export async function readLatestLoginDebugSummary(limitDays = 7): Promise<LoginD
   for (const file of files) {
     const absolutePath = path.join(LOGS_DIR, file);
     const raw = await readFile(absolutePath, 'utf8').catch(() => '');
+    const events: LoginDebugEvent[] = [];
     for (const line of raw.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -68,38 +126,12 @@ export async function readLatestLoginDebugSummary(limitDays = 7): Promise<LoginD
       } catch {
         continue;
       }
+      events.push(event);
+    }
 
-      if (!summary) {
-        summary = {
-          logPath: absolutePath,
-          lastTimestamp: null,
-          lastUrl: null,
-          lastCode: null,
-          lastRequestId: null,
-          lastError: null,
-          lastEventType: null,
-        };
-      }
-
-      summary.logPath = absolutePath;
-      summary.lastTimestamp = event.ts;
-      summary.lastEventType = event.type;
-
-      const url = typeof event.meta?.loginUrl === 'string' ? event.meta.loginUrl : null;
-      const code = event.meta?.userCode;
-      const requestId = event.meta?.requestId;
-      if (url) {
-        summary.lastUrl = url;
-      }
-      if (typeof code === 'string') {
-        summary.lastCode = code;
-      }
-      if (typeof requestId === 'string') {
-        summary.lastRequestId = requestId;
-      }
-      if (event.type === 'login-error' && event.message) {
-        summary.lastError = event.message;
-      }
+    const fileSummary = summarizeLoginDebugEvents(events, absolutePath);
+    if (fileSummary) {
+      summary = fileSummary;
     }
   }
 

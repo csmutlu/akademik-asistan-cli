@@ -9,7 +9,7 @@ test('summarizeLoginDebugEvents clears stale errors after successful login', () 
         ts: '2026-04-01T12:00:00.000Z',
         type: 'login-url-generated',
         meta: {
-          loginUrl: 'https://akademikasistan.com/cli-auth?code=ABCD-EFGH',
+          loginUrl: 'https://akademikasistan.com/login?code=ABCD-EFGH',
           userCode: 'ABCD-EFGH',
           requestId: 'request-1',
         },

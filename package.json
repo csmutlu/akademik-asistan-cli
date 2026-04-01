@@ -1,6 +1,6 @@
 {
   "name": "aasistan",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "Akademik Asistan command line interface",
   "type": "module",
   "repository": {

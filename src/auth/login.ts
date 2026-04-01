@@ -55,7 +55,7 @@ function formatExpiry(iso: string): string {
 }
 
 export function buildCliEntryUrl(baseUrl = DEFAULT_WEB_BASE_URL): string {
-  return `${baseUrl.replace(/\/$/, '')}/cli-auth`;
+  return `${baseUrl.replace(/\/$/, '')}/login`;
 }
 
 export function buildCliPrefilledUrl(userCode: string, baseUrl = DEFAULT_WEB_BASE_URL): string {

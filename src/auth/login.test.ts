@@ -37,13 +37,13 @@ test('buildFallbackProfile keeps redeemed user identity', () => {
 test('buildCliEntryUrl normalizes the base path', () => {
   assert.equal(
     buildCliEntryUrl('https://akademik-assistant-api.csmutlu10.workers.dev/'),
-    'https://akademik-assistant-api.csmutlu10.workers.dev/cli-auth',
+    'https://akademik-assistant-api.csmutlu10.workers.dev/login',
   );
 });
 
 test('buildCliPrefilledUrl injects the device code', () => {
   assert.equal(
     buildCliPrefilledUrl('ABCD-EFGH', 'https://akademik-assistant-api.csmutlu10.workers.dev'),
-    'https://akademik-assistant-api.csmutlu10.workers.dev/cli-auth?code=ABCD-EFGH',
+    'https://akademik-assistant-api.csmutlu10.workers.dev/login?code=ABCD-EFGH',
   );
 });

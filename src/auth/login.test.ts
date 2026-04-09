@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCliEntryUrl, buildCliPrefilledUrl, buildFallbackProfile, secondsUntil } from './login.js';
+import {
+  buildCliEntryUrl,
+  buildCliPrefilledUrl,
+  buildFallbackProfile,
+  normalizeCliLoginStartError,
+  secondsUntil,
+} from './login.js';
 
 test('secondsUntil returns null when no expiry is provided', () => {
   assert.equal(secondsUntil(null), null);
@@ -45,5 +51,12 @@ test('buildCliPrefilledUrl injects the device code', () => {
   assert.equal(
     buildCliPrefilledUrl('ABCD-EFGH', 'https://akademik-assistant-api.csmutlu10.workers.dev'),
     'https://akademik-assistant-api.csmutlu10.workers.dev/login?code=ABCD-EFGH',
+  );
+});
+
+test('normalizeCliLoginStartError rewrites stale worker auth routing errors', () => {
+  assert.equal(
+    normalizeCliLoginStartError(new Error('Unknown auth action')),
+    'CLI giriş servisi geçici olarak eski bir worker sürümüne denk geldi. Birkaç saniye sonra tekrar deneyin.',
   );
 });

@@ -54,6 +54,14 @@ function formatExpiry(iso: string): string {
   });
 }
 
+export function normalizeCliLoginStartError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '').trim();
+  if (/unknown auth action/i.test(message)) {
+    return 'CLI giriş servisi geçici olarak eski bir worker sürümüne denk geldi. Birkaç saniye sonra tekrar deneyin.';
+  }
+  return message || 'CLI login isteği oluşturulamadı.';
+}
+
 export function buildCliEntryUrl(baseUrl = DEFAULT_WEB_BASE_URL): string {
   return `${baseUrl.replace(/\/$/, '')}/login`;
 }
@@ -139,7 +147,9 @@ async function runLoginFlow(
     logPath,
   });
 
-  const request = await api.createCliLoginRequest();
+  const request = await api.createCliLoginRequest().catch((error) => {
+    throw new Error(normalizeCliLoginStartError(error));
+  });
   const entryUrl = request.entryUrl || buildCliEntryUrl(DEFAULT_WEB_BASE_URL);
   const loginUrl = request.verificationUrl.startsWith('http')
     ? request.verificationUrl

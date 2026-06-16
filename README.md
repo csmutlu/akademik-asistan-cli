@@ -57,6 +57,7 @@ Inside the interface:
 
 - `Tab`: switch between dashboard, detail drawer, and right rail
 - `j/k`, arrows: move between dashboard cards
+- `1-6`: jump directly to a dashboard card
 - `Enter`: open selected view
 - `b`: toggle Buddy rail
 - `/`: command palette

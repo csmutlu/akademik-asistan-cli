@@ -8,7 +8,7 @@ import { executeCommand } from '../commands/execute.js';
 import { getCommandDefinition, parseCommand } from '../commands/registry.js';
 import { HOME_REFRESH_INTERVAL_MS } from '../config.js';
 import { loadHomeSnapshot, readCachedHomeSnapshot } from '../coordinator/home.js';
-import { ui } from '../display.js';
+import { icon, shouldUseSimpleBorders, ui } from '../display.js';
 import { readLatestLoginDebugSummary, type LoginDebugSummary } from '../logging/login-debug.js';
 import { renderCommandResult, renderHelpText, renderOnboardingText } from '../presenters/text.js';
 import { writePreferences } from '../state/storage.js';
@@ -16,6 +16,8 @@ import { buildActivityRailLines, pushActivityEntry, type ActivityEntry } from '.
 import { getIdentityLabel, getTransientFailureText } from './connection.js';
 import { getErrorPanelLines, getErrorPanelTitle, type ErrorSource } from './error-panel.js';
 import { isBackgroundRefresh, shouldKeepLastSnapshotOnError, type HomeRefreshReason } from './home-refresh.js';
+import { Spinner } from './Spinner.js';
+import { compactAgendaLine, urgencyTone, type Tone } from '../presenters/format.js';
 import { getCliVersion } from '../version.js';
 import type {
   BuddyMessage,
@@ -27,12 +29,14 @@ import type {
   StoredPreferences,
 } from '../types.js';
 
+type PanelLine = string | { text: string; tone?: Tone };
+
 type HomeCard = {
   id: 'gundem' | 'bugun' | 'odev' | 'sinav' | 'duyurular' | 'yemekhane';
   title: string;
   badge: string;
   subtitle: string;
-  lines: string[];
+  lines: PanelLine[];
   tone: 'cyan' | 'green' | 'yellow' | 'magenta' | 'blue';
 };
 
@@ -44,29 +48,46 @@ type AppProps = {
   preferences: StoredPreferences;
 };
 
-function agendaLines(payload: HomePayload['cards']['gundem'], emptyText: string): string[] {
+function agendaLines(payload: HomePayload['cards']['gundem'], emptyText: string): PanelLine[] {
   if (payload.items.length === 0) {
-    return [emptyText];
+    return [{ text: emptyText, tone: 'gray' }];
   }
 
-  return payload.items.slice(0, 3).map((item) => `${item.title} • ${item.badge}`);
+  return payload.items.slice(0, 3).map((item) => ({
+    text: compactAgendaLine(item),
+    tone: urgencyTone(item),
+  }));
 }
 
-function announcementLines(payload: HomePayload['cards']['duyurular']): string[] {
+function announcementLines(payload: HomePayload['cards']['duyurular']): PanelLine[] {
   if (payload.items.length === 0) {
-    return ['Yeni duyuru görünmüyor.'];
+    return [{ text: 'Yeni duyuru görünmüyor.', tone: 'gray' }];
   }
 
-  return payload.items.slice(0, 3).map((item) => `${item.title} • ${item.date}`);
+  const glyph = icon('📣', '');
+  return payload.items.slice(0, 3).map((item) => ({
+    text: `${glyph} ${item.title} • ${item.date}`.trim(),
+    tone: 'blue' as Tone,
+  }));
 }
 
-function cafeteriaLines(payload: HomePayload['cards']['yemekhane']): string[] {
+function cafeteriaLines(payload: HomePayload['cards']['yemekhane']): PanelLine[] {
   if (!payload.menu?.items.length) {
-    return ['Bugün için menü bulunamadı.'];
+    return [{ text: 'Bugün için menü bulunamadı.', tone: 'gray' }];
   }
 
-  return payload.menu.items.slice(0, 3);
+  const bullet = icon('•', '-');
+  return payload.menu.items.slice(0, 3).map((item) => `${bullet} ${item}`.trim());
 }
+
+const CARD_GLYPH: Record<HomeCard['id'], string> = {
+  gundem: icon('📌', ''),
+  bugun: icon('📅', ''),
+  odev: icon('📝', ''),
+  sinav: icon('🧪', ''),
+  duyurular: icon('📣', ''),
+  yemekhane: icon('🍽', ''),
+};
 
 function buildCardState(home: HomePayload | null): HomeCard[] {
   if (!home) {
@@ -210,33 +231,46 @@ type PanelProps = {
   title: string;
   subtitle?: string;
   badge?: string;
-  lines?: string[];
+  glyph?: string;
+  lines?: PanelLine[];
   selected?: boolean;
   borderColor?: 'cyan' | 'green' | 'yellow' | 'magenta' | 'red' | 'blue' | 'gray';
   titleColor?: 'cyanBright' | 'greenBright' | 'yellowBright' | 'magentaBright' | 'whiteBright' | 'blueBright' | 'redBright';
 };
 
+function renderPanelLine(keyBase: string, line: PanelLine, index: number) {
+  if (typeof line === 'string') {
+    return <Text key={`${keyBase}-${index}`}>{ui(line)}</Text>;
+  }
+  return (
+    <Text key={`${keyBase}-${index}`} color={line.tone}>
+      {ui(line.text)}
+    </Text>
+  );
+}
+
 function Panel({
   title,
   subtitle,
   badge,
+  glyph,
   lines = [],
   selected = false,
   borderColor = 'gray',
   titleColor = 'whiteBright',
 }: PanelProps) {
+  const marker = selected ? icon('▸ ', '> ') : '';
+  const prefix = glyph ? `${glyph} ` : '';
   return (
-    <Box borderStyle="round" borderColor={selected ? borderColor : 'gray'} paddingX={1} paddingY={0} marginBottom={1} flexDirection="column">
+    <Box borderStyle={shouldUseSimpleBorders() ? 'single' : 'round'} borderColor={selected ? borderColor : 'gray'} paddingX={1} paddingY={0} marginBottom={1} flexDirection="column">
       <Box justifyContent="space-between">
-        <Text color={selected ? titleColor : 'whiteBright'}>{ui(title)}</Text>
+        <Text color={selected ? titleColor : 'whiteBright'} bold={selected}>{ui(`${marker}${prefix}${title}`)}</Text>
         {badge ? <Text color="gray">{ui(badge)}</Text> : null}
       </Box>
       {subtitle ? <Text color="gray">{ui(subtitle)}</Text> : null}
       {lines.length > 0 ? (
         <Box flexDirection="column" marginTop={1}>
-          {lines.map((line, index) => (
-            <Text key={`${title}-${index}`}>{ui(line)}</Text>
-          ))}
+          {lines.map((line, index) => renderPanelLine(title, line, index))}
         </Box>
       ) : null}
     </Box>
@@ -667,6 +701,14 @@ export function CliApp({ api, preferences }: AppProps) {
     }
 
     if (activeRegion === 'grid') {
+      if (/^[1-6]$/.test(input)) {
+        const targetIndex = Number(input) - 1;
+        if (targetIndex < cards.length) {
+          setSelectedIndex(targetIndex);
+          openCommand(cards[targetIndex].id).catch(() => undefined);
+        }
+        return;
+      }
       if (input === 'j' || key.downArrow) {
         setSelectedIndex((current) => (current + 1) % cards.length);
         return;
@@ -752,6 +794,7 @@ export function CliApp({ api, preferences }: AppProps) {
               <Panel
                 key={card.id}
                 title={card.title}
+                glyph={CARD_GLYPH[card.id]}
                 subtitle={card.subtitle}
                 badge={card.badge}
                 lines={card.lines}
@@ -789,7 +832,7 @@ export function CliApp({ api, preferences }: AppProps) {
     }
 
     if (loading && !detailResult) {
-      return <Text color="yellow">{ui('Detay yükleniyor...')}</Text>;
+      return <Spinner label="Detay yükleniyor..." />;
     }
 
     if (!detailResult || !detailCommand || detailCommand === 'buddy') {
@@ -854,7 +897,7 @@ export function CliApp({ api, preferences }: AppProps) {
           <Text color="gray">{ui(commandLine)}</Text>
         </Box>
         <Box flexDirection="column" marginTop={narrow ? 1 : 0}>
-          <Text color={error ? 'redBright' : profile ? 'greenBright' : 'yellow'}>{ui(`Durum: ${status}`)}</Text>
+          <Text color={error ? 'redBright' : profile ? 'greenBright' : 'yellow'}>{ui(`${icon('●', '*')} Durum: ${status}`)}</Text>
           <Text color="gray">{ui(`Region: ${activeRegion} • Rail: ${railMode}`)}</Text>
         </Box>
       </Box>
@@ -903,7 +946,7 @@ export function CliApp({ api, preferences }: AppProps) {
 
       {loading ? (
         <Box marginTop={1}>
-          <Text color="yellow">{ui('Paneller yenileniyor...')}</Text>
+          <Spinner label="Paneller yenileniyor..." />
         </Box>
       ) : null}
 

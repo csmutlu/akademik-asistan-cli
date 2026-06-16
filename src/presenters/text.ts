@@ -1,5 +1,5 @@
 import { getCommandDefinitions } from '../commands/registry.js';
-import { ui } from '../display.js';
+import { icon, ui } from '../display.js';
 import { getCliVersion } from '../version.js';
 import type {
   AgendaPayload,
@@ -27,9 +27,9 @@ function renderSection(section: AgendaSection): string {
     section.title,
     ...section.items.map((item) =>
       [
-        `- ${item.title}`,
-        `  ${item.detail}`,
-        `  ${item.badge}`,
+        `${icon(item.emoji, '-')} ${item.title}`,
+        `   ${item.detail}`,
+        `   ${item.badge}`,
       ].join('\n'),
     ),
   ].join('\n');
@@ -70,6 +70,7 @@ export function renderHelpText(): string {
     ...definitions,
     '',
     'TUI kısayolları',
+    '- 1-6: dashboard kartını doğrudan aç',
     '- j/k veya ok tuşları: panel değiştir',
     '- Tab: paneller arasında gez',
     '- Enter: seçili görünümü aç',
@@ -133,9 +134,18 @@ export function renderBuddyReply(payload: BuddyReplyPayload): string {
 }
 
 export function renderAgenda(payload: AgendaPayload): string {
+  const { summary } = payload;
+  const summaryBits = [
+    summary.classes ? `${summary.classes} ders` : null,
+    summary.assignments ? `${summary.assignments} ödev` : null,
+    summary.exams ? `${summary.exams} sınav` : null,
+    summary.periods ? `${summary.periods} dönem` : null,
+  ].filter(Boolean).join(' • ');
+
   return ui([
     divider(`${payload.title} • ${payload.summary.label}`),
     `${payload.now} (${payload.timezone})`,
+    `Özet: ${summaryBits || 'yaklaşan kayıt yok'}`,
     '',
     ...payload.sections.map(renderSection),
   ].join('\n\n'));
